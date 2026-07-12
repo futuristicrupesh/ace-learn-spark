@@ -45,15 +45,15 @@ Coaching rules:
 4. Be crisp, encouraging, and exam-focused. End most replies with a short next action.
 5. Use markdown: bold for key ideas, lists for steps, code blocks for equations/code.`;
 
-        const modelMessages: ModelMessage[] = [
-          { role: "system", content: system },
-          ...history.map((m) => ({ role: m.role, content: m.content }) as ModelMessage),
-        ];
+        const modelMessages: ModelMessage[] = history.map(
+          (m) => ({ role: m.role, content: m.content }) as ModelMessage,
+        );
 
         try {
           const gateway = createLovableAiGatewayProvider(requireGatewayKey());
           const result = streamText({
             model: gateway("openai/gpt-5.5"),
+            system,
             messages: modelMessages,
           });
           return result.toTextStreamResponse();
