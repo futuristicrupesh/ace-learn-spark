@@ -53,7 +53,7 @@ Coaching rules:
           const gateway = createLovableAiGatewayProvider(requireGatewayKey());
           const result = streamText({
             model: gateway("openai/gpt-5.5"),
-            system,
+            instructions: system,
             messages: modelMessages,
           });
           return result.toTextStreamResponse();
