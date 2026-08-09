@@ -366,7 +366,7 @@ this is my code..  make my ai perfect
 
 The frontend was built with [Lovable](https://lovable.dev).
 
-The backend was done by a variety or neural networks using primarily python
+The backend was done by a variety of neural networks and by using primarily python
 
 **Live app**: https://ace-learn-spark.lovable.app
 
