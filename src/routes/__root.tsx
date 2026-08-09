@@ -93,6 +93,18 @@ function RootShell({ children }: { children: ReactNode }) {
 function Nav() {
   const link = "text-sm text-muted-foreground hover:text-foreground transition-colors";
   const active = "text-foreground font-medium";
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+  const { queryClient } = Route.useRouteContext();
+
+  async function signOut() {
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    await supabase.auth.signOut();
+    clearProfile();
+    navigate({ to: "/auth", replace: true });
+  }
+
   return (
     <header className="border-b border-border/70 bg-background/80 backdrop-blur sticky top-0 z-40">
       <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between">
@@ -104,11 +116,18 @@ function Nav() {
           <Link to="/lecture" className={link} activeProps={{ className: active }}>Lecture</Link>
           <Link to="/coach" className={link} activeProps={{ className: active }}>Doubt Coach</Link>
           <Link to="/homework" className={link} activeProps={{ className: active }}>Homework</Link>
+          <Link to="/testimonials" className={link} activeProps={{ className: active }}>Testimonials</Link>
+          {!loading && (user ? (
+            <button onClick={signOut} className={link}>Sign out</button>
+          ) : (
+            <Link to="/auth" className={link} activeProps={{ className: active }}>Sign in</Link>
+          ))}
         </nav>
       </div>
     </header>
   );
 }
+
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();

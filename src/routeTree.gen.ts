@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TestimonialsRouteImport } from './routes/testimonials'
 import { Route as LectureRouteImport } from './routes/lecture'
 import { Route as HomeworkRouteImport } from './routes/homework'
 import { Route as CoachRouteImport } from './routes/coach'
@@ -17,6 +18,11 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiTtsRouteImport } from './routes/api/tts'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 
+const TestimonialsRoute = TestimonialsRouteImport.update({
+  id: '/testimonials',
+  path: '/testimonials',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LectureRoute = LectureRouteImport.update({
   id: '/lecture',
   path: '/lecture',
@@ -59,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/coach': typeof CoachRoute
   '/homework': typeof HomeworkRoute
   '/lecture': typeof LectureRoute
+  '/testimonials': typeof TestimonialsRoute
   '/api/chat': typeof ApiChatRoute
   '/api/tts': typeof ApiTtsRoute
 }
@@ -68,6 +75,7 @@ export interface FileRoutesByTo {
   '/coach': typeof CoachRoute
   '/homework': typeof HomeworkRoute
   '/lecture': typeof LectureRoute
+  '/testimonials': typeof TestimonialsRoute
   '/api/chat': typeof ApiChatRoute
   '/api/tts': typeof ApiTtsRoute
 }
@@ -78,6 +86,7 @@ export interface FileRoutesById {
   '/coach': typeof CoachRoute
   '/homework': typeof HomeworkRoute
   '/lecture': typeof LectureRoute
+  '/testimonials': typeof TestimonialsRoute
   '/api/chat': typeof ApiChatRoute
   '/api/tts': typeof ApiTtsRoute
 }
@@ -89,6 +98,7 @@ export interface FileRouteTypes {
     | '/coach'
     | '/homework'
     | '/lecture'
+    | '/testimonials'
     | '/api/chat'
     | '/api/tts'
   fileRoutesByTo: FileRoutesByTo
@@ -98,6 +108,7 @@ export interface FileRouteTypes {
     | '/coach'
     | '/homework'
     | '/lecture'
+    | '/testimonials'
     | '/api/chat'
     | '/api/tts'
   id:
@@ -107,6 +118,7 @@ export interface FileRouteTypes {
     | '/coach'
     | '/homework'
     | '/lecture'
+    | '/testimonials'
     | '/api/chat'
     | '/api/tts'
   fileRoutesById: FileRoutesById
@@ -117,12 +129,20 @@ export interface RootRouteChildren {
   CoachRoute: typeof CoachRoute
   HomeworkRoute: typeof HomeworkRoute
   LectureRoute: typeof LectureRoute
+  TestimonialsRoute: typeof TestimonialsRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiTtsRoute: typeof ApiTtsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/testimonials': {
+      id: '/testimonials'
+      path: '/testimonials'
+      fullPath: '/testimonials'
+      preLoaderRoute: typeof TestimonialsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/lecture': {
       id: '/lecture'
       path: '/lecture'
@@ -181,6 +201,7 @@ const rootRouteChildren: RootRouteChildren = {
   CoachRoute: CoachRoute,
   HomeworkRoute: HomeworkRoute,
   LectureRoute: LectureRoute,
+  TestimonialsRoute: TestimonialsRoute,
   ApiChatRoute: ApiChatRoute,
   ApiTtsRoute: ApiTtsRoute,
 }
