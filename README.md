@@ -364,17 +364,11 @@ if __name__ == "__main__":
 
 this is my code..  make my ai perfect
 
-This project was built with [Lovable](https://lovable.dev).
+The frontend was built with [Lovable](https://lovable.dev).
+
+The backend was done by a variety or neural networks using primarily python
 
 **Live app**: https://ace-learn-spark.lovable.app
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/8f7f2365-2072-4df8-bb75-00bf7a235ce3).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
 
 ## Development
 
