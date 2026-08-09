@@ -1,10 +1,18 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { loadProfile, saveProfile, type StudentProfile } from "@/lib/profile";
+import {
+  loadProfile,
+  saveProfile,
+  fetchRemoteProfile,
+  saveRemoteProfile,
+  type StudentProfile,
+} from "@/lib/profile";
+import { useAuth } from "@/hooks/use-auth";
 import { BookOpen, MessageSquare, PencilRuler, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -16,6 +24,7 @@ const CLASSES = ["6th Grade","7th Grade","8th Grade","9th Grade","10th Grade","1
 
 function Home() {
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [ready, setReady] = useState(false);
   const [form, setForm] = useState<StudentProfile>({
@@ -30,23 +39,50 @@ function Home() {
   });
 
   useEffect(() => {
-    const p = loadProfile();
-    if (p) setProfile(p);
-    setReady(true);
-  }, []);
+    if (authLoading) return;
+    let cancelled = false;
+    (async () => {
+      if (user) {
+        const remote = await fetchRemoteProfile(user.id);
+        if (cancelled) return;
+        if (remote) {
+          saveProfile(remote);
+          setProfile(remote);
+          setForm(remote);
+        } else {
+          const local = loadProfile();
+          setForm((f) => ({ ...(local ?? f), userId: user.id }));
+        }
+      } else {
+        const p = loadProfile();
+        if (p) setProfile(p);
+      }
+      if (!cancelled) setReady(true);
+    })();
+    return () => { cancelled = true; };
+  }, [user, authLoading]);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     const next: StudentProfile = {
       ...form,
-      userId: form.userId || crypto.randomUUID(),
+      userId: user?.id || form.userId || crypto.randomUUID(),
       studentName: form.studentName.trim() || "Student",
     };
     saveProfile(next);
     setProfile(next);
+    if (user) {
+      try {
+        await saveRemoteProfile(next);
+        toast.success("Profile saved to your account.");
+      } catch {
+        toast.error("Could not save your profile to the cloud.");
+      }
+    }
   }
 
   if (!ready) return null;
+
 
   if (profile) {
     return (
