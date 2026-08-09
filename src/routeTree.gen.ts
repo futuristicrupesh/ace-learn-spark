@@ -9,13 +9,20 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TestimonialsRouteImport } from './routes/testimonials'
 import { Route as LectureRouteImport } from './routes/lecture'
 import { Route as HomeworkRouteImport } from './routes/homework'
 import { Route as CoachRouteImport } from './routes/coach'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiTtsRouteImport } from './routes/api/tts'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 
+const TestimonialsRoute = TestimonialsRouteImport.update({
+  id: '/testimonials',
+  path: '/testimonials',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LectureRoute = LectureRouteImport.update({
   id: '/lecture',
   path: '/lecture',
@@ -29,6 +36,11 @@ const HomeworkRoute = HomeworkRouteImport.update({
 const CoachRoute = CoachRouteImport.update({
   id: '/coach',
   path: '/coach',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -49,26 +61,32 @@ const ApiChatRoute = ApiChatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/coach': typeof CoachRoute
   '/homework': typeof HomeworkRoute
   '/lecture': typeof LectureRoute
+  '/testimonials': typeof TestimonialsRoute
   '/api/chat': typeof ApiChatRoute
   '/api/tts': typeof ApiTtsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/coach': typeof CoachRoute
   '/homework': typeof HomeworkRoute
   '/lecture': typeof LectureRoute
+  '/testimonials': typeof TestimonialsRoute
   '/api/chat': typeof ApiChatRoute
   '/api/tts': typeof ApiTtsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/coach': typeof CoachRoute
   '/homework': typeof HomeworkRoute
   '/lecture': typeof LectureRoute
+  '/testimonials': typeof TestimonialsRoute
   '/api/chat': typeof ApiChatRoute
   '/api/tts': typeof ApiTtsRoute
 }
@@ -76,34 +94,55 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/auth'
     | '/coach'
     | '/homework'
     | '/lecture'
+    | '/testimonials'
     | '/api/chat'
     | '/api/tts'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/coach' | '/homework' | '/lecture' | '/api/chat' | '/api/tts'
-  id:
-    | '__root__'
+  to:
     | '/'
+    | '/auth'
     | '/coach'
     | '/homework'
     | '/lecture'
+    | '/testimonials'
+    | '/api/chat'
+    | '/api/tts'
+  id:
+    | '__root__'
+    | '/'
+    | '/auth'
+    | '/coach'
+    | '/homework'
+    | '/lecture'
+    | '/testimonials'
     | '/api/chat'
     | '/api/tts'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthRoute: typeof AuthRoute
   CoachRoute: typeof CoachRoute
   HomeworkRoute: typeof HomeworkRoute
   LectureRoute: typeof LectureRoute
+  TestimonialsRoute: typeof TestimonialsRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiTtsRoute: typeof ApiTtsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/testimonials': {
+      id: '/testimonials'
+      path: '/testimonials'
+      fullPath: '/testimonials'
+      preLoaderRoute: typeof TestimonialsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/lecture': {
       id: '/lecture'
       path: '/lecture'
@@ -123,6 +162,13 @@ declare module '@tanstack/react-router' {
       path: '/coach'
       fullPath: '/coach'
       preLoaderRoute: typeof CoachRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -151,22 +197,14 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthRoute: AuthRoute,
   CoachRoute: CoachRoute,
   HomeworkRoute: HomeworkRoute,
   LectureRoute: LectureRoute,
+  TestimonialsRoute: TestimonialsRoute,
   ApiChatRoute: ApiChatRoute,
   ApiTtsRoute: ApiTtsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
