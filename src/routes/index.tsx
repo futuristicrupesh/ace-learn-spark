@@ -150,6 +150,12 @@ function Home() {
           <p className="mt-4 text-lg text-muted-foreground">
             Full narrated lectures, hint-based doubt solving, and exam-grade homework — all graded strictly by AceCoach.
           </p>
+          {!user && (
+            <p className="mt-4 text-sm">
+              <Link to="/auth" className="underline underline-offset-4">Create a free account</Link> to keep your profile and progress forever.
+            </p>
+          )}
+
         </div>
 
         <Card className="p-6 shadow-[var(--shadow-focus)]">
