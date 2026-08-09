@@ -14,7 +14,75 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          class_name: string
+          country: string
+          created_at: string
+          daily_task_goal: number
+          education_board: string
+          exam_prep_time: string
+          id: string
+          parent_email: string | null
+          student_name: string
+          updated_at: string
+        }
+        Insert: {
+          class_name?: string
+          country?: string
+          created_at?: string
+          daily_task_goal?: number
+          education_board?: string
+          exam_prep_time?: string
+          id: string
+          parent_email?: string | null
+          student_name?: string
+          updated_at?: string
+        }
+        Update: {
+          class_name?: string
+          country?: string
+          created_at?: string
+          daily_task_goal?: number
+          education_board?: string
+          exam_prep_time?: string
+          id?: string
+          parent_email?: string | null
+          student_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      testimonials: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          name: string
+          rating: number
+          role: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          name: string
+          rating?: number
+          role?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          name?: string
+          rating?: number
+          role?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
