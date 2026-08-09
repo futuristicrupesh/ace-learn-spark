@@ -116,14 +116,23 @@ function Home() {
           />
         </div>
 
-        <div className="mt-10">
+        <div className="mt-10 flex items-center gap-5">
           <button
-            onClick={() => { setProfile(null); setForm({ ...form, userId: "", studentName: profile.studentName }); }}
+            onClick={() => { setProfile(null); setForm({ ...form, userId: user?.id ?? "", studentName: profile.studentName }); }}
             className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4"
           >
             Edit profile
           </button>
+          <Link to="/testimonials" className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4">
+            Share a testimonial
+          </Link>
+          {!user && (
+            <Link to="/auth" className="text-xs text-accent-foreground underline underline-offset-4">
+              Sign in to save your profile forever
+            </Link>
+          )}
         </div>
+
       </main>
     );
   }
