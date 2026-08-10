@@ -16,6 +16,7 @@ import {
   type Mission,
   type Grade,
 } from "@/lib/homework.functions";
+import { RatingPromptDialog, useRatingPrompt } from "@/components/testimonials";
 import { Loader2, Sparkles, RotateCw } from "lucide-react";
 
 export const Route = createFileRoute("/homework")({
