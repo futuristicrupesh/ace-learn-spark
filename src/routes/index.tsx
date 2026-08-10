@@ -13,6 +13,7 @@ import {
   type StudentProfile,
 } from "@/lib/profile";
 import { useAuth } from "@/hooks/use-auth";
+import { CommunityProof, useTestimonials } from "@/components/testimonials";
 import { BookOpen, MessageSquare, PencilRuler, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -25,6 +26,7 @@ const CLASSES = ["6th Grade","7th Grade","8th Grade","9th Grade","10th Grade","1
 function Home() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
+  const { items: testimonials, loading: testimonialsLoading } = useTestimonials();
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [ready, setReady] = useState(false);
   const [form, setForm] = useState<StudentProfile>({
@@ -133,6 +135,7 @@ function Home() {
           )}
         </div>
 
+        <CommunityProof items={testimonials} loading={testimonialsLoading} />
       </main>
     );
   }
@@ -196,6 +199,8 @@ function Home() {
           </form>
         </Card>
       </div>
+
+      <CommunityProof items={testimonials} loading={testimonialsLoading} />
     </main>
   );
 }

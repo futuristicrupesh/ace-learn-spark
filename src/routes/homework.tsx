@@ -16,6 +16,7 @@ import {
   type Mission,
   type Grade,
 } from "@/lib/homework.functions";
+import { RatingPromptDialog, useRatingPrompt } from "@/components/testimonials";
 import { Loader2, Sparkles, RotateCw } from "lucide-react";
 
 export const Route = createFileRoute("/homework")({
@@ -45,6 +46,7 @@ function HomeworkPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [grades, setGrades] = useState<Record<string, Grade>>({});
   const [flipped, setFlipped] = useState<Record<number, boolean>>({});
+  const prompt = useRatingPrompt();
 
   const generate = useMutation({
     mutationFn: async () => {
@@ -77,7 +79,10 @@ function HomeworkPage() {
       });
       return { id: q.id, result };
     },
-    onSuccess: ({ id, result }) => setGrades((g) => ({ ...g, [id]: result })),
+    onSuccess: ({ id, result }) => {
+      setGrades((g) => ({ ...g, [id]: result }));
+      setTimeout(() => prompt.ask("your graded homework"), 1200);
+    },
     onError: (e: Error) => toast.error(e.message || "Grading failed"),
   });
 
@@ -181,6 +186,8 @@ function HomeworkPage() {
           </section>
         </div>
       )}
+
+      <RatingPromptDialog open={prompt.open} onOpenChange={prompt.setOpen} context={prompt.context} />
     </main>
   );
 }

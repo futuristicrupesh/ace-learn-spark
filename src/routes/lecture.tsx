@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { loadProfile } from "@/lib/profile";
 import { generateLecture, type Lecture } from "@/lib/lectures.functions";
+import { RatingPromptDialog, useRatingPrompt } from "@/components/testimonials";
 import { Play, Pause, Loader2, CheckCircle2 } from "lucide-react";
 
 export const Route = createFileRoute("/lecture")({
@@ -19,6 +20,7 @@ function LecturePage() {
   const [topic, setTopic] = useState("");
   const [lecture, setLecture] = useState<Lecture | null>(null);
   const [active, setActive] = useState(0);
+  const prompt = useRatingPrompt();
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -32,7 +34,11 @@ function LecturePage() {
         },
       });
     },
-    onSuccess: (data) => { setLecture(data); setActive(0); },
+    onSuccess: (data) => {
+      setLecture(data);
+      setActive(0);
+      setTimeout(() => prompt.ask("your lecture"), 1200);
+    },
     onError: (e: Error) => toast.error(e.message || "Failed to generate lecture"),
   });
 
@@ -93,6 +99,8 @@ function LecturePage() {
           <LecturePart part={lecture.parts[active]} index={active} />
         </div>
       )}
+
+      <RatingPromptDialog open={prompt.open} onOpenChange={prompt.setOpen} context={prompt.context} />
     </main>
   );
 }

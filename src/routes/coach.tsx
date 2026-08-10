@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { loadProfile } from "@/lib/profile";
+import { RatingPromptDialog, useRatingPrompt } from "@/components/testimonials";
 import { Send, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/coach")({
@@ -23,6 +24,7 @@ function CoachPage() {
   const [streaming, setStreaming] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const prompt = useRatingPrompt();
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -67,6 +69,7 @@ function CoachPage() {
           return copy;
         });
       }
+      if (acc.trim()) setTimeout(() => prompt.ask("that doubt session"), 800);
     } catch (err) {
       if (!controller.signal.aborted) {
         toast.error(err instanceof Error ? err.message : "Chat failed");
@@ -111,6 +114,8 @@ function CoachPage() {
           </Button>
         </div>
       </Card>
+
+      <RatingPromptDialog open={prompt.open} onOpenChange={prompt.setOpen} context={prompt.context} />
     </main>
   );
 }
