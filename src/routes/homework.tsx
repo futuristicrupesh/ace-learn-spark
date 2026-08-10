@@ -79,7 +79,10 @@ function HomeworkPage() {
       });
       return { id: q.id, result };
     },
-    onSuccess: ({ id, result }) => setGrades((g) => ({ ...g, [id]: result })),
+    onSuccess: ({ id, result }) => {
+      setGrades((g) => ({ ...g, [id]: result }));
+      setTimeout(() => prompt.ask("your graded homework"), 1200);
+    },
     onError: (e: Error) => toast.error(e.message || "Grading failed"),
   });
 
