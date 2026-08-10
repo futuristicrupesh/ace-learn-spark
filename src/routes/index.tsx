@@ -135,6 +135,7 @@ function Home() {
           )}
         </div>
 
+        <CommunityProof items={testimonials} loading={testimonialsLoading} />
       </main>
     );
   }
