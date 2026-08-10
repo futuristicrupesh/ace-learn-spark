@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { loadProfile } from "@/lib/profile";
 import { generateLecture, type Lecture } from "@/lib/lectures.functions";
+import { RatingPromptDialog, useRatingPrompt } from "@/components/testimonials";
 import { Play, Pause, Loader2, CheckCircle2 } from "lucide-react";
 
 export const Route = createFileRoute("/lecture")({
