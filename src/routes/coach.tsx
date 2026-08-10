@@ -114,6 +114,8 @@ function CoachPage() {
           </Button>
         </div>
       </Card>
+
+      <RatingPromptDialog open={prompt.open} onOpenChange={prompt.setOpen} context={prompt.context} />
     </main>
   );
 }
