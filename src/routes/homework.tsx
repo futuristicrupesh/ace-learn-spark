@@ -186,6 +186,8 @@ function HomeworkPage() {
           </section>
         </div>
       )}
+
+      <RatingPromptDialog open={prompt.open} onOpenChange={prompt.setOpen} context={prompt.context} />
     </main>
   );
 }
