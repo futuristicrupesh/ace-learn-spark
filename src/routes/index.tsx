@@ -198,6 +198,8 @@ function Home() {
           </form>
         </Card>
       </div>
+
+      <CommunityProof items={testimonials} loading={testimonialsLoading} />
     </main>
   );
 }
