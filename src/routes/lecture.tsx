@@ -99,6 +99,8 @@ function LecturePage() {
           <LecturePart part={lecture.parts[active]} index={active} />
         </div>
       )}
+
+      <RatingPromptDialog open={prompt.open} onOpenChange={prompt.setOpen} context={prompt.context} />
     </main>
   );
 }
