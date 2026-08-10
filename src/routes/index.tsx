@@ -13,6 +13,7 @@ import {
   type StudentProfile,
 } from "@/lib/profile";
 import { useAuth } from "@/hooks/use-auth";
+import { CommunityProof, useTestimonials } from "@/components/testimonials";
 import { BookOpen, MessageSquare, PencilRuler, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/")({
