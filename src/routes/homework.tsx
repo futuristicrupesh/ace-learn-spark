@@ -46,6 +46,7 @@ function HomeworkPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [grades, setGrades] = useState<Record<string, Grade>>({});
   const [flipped, setFlipped] = useState<Record<number, boolean>>({});
+  const prompt = useRatingPrompt();
 
   const generate = useMutation({
     mutationFn: async () => {
