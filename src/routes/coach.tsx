@@ -69,6 +69,7 @@ function CoachPage() {
           return copy;
         });
       }
+      if (acc.trim()) setTimeout(() => prompt.ask("that doubt session"), 800);
     } catch (err) {
       if (!controller.signal.aborted) {
         toast.error(err instanceof Error ? err.message : "Chat failed");
