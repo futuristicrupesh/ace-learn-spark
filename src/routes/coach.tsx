@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { loadProfile } from "@/lib/profile";
+import { RatingPromptDialog, useRatingPrompt } from "@/components/testimonials";
 import { Send, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/coach")({
