@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TestimonialsRouteImport } from './routes/testimonials'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as LectureRouteImport } from './routes/lecture'
 import { Route as HomeworkRouteImport } from './routes/homework'
 import { Route as CoachRouteImport } from './routes/coach'
@@ -21,6 +22,11 @@ import { Route as ApiChatRouteImport } from './routes/api/chat'
 const TestimonialsRoute = TestimonialsRouteImport.update({
   id: '/testimonials',
   path: '/testimonials',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LectureRoute = LectureRouteImport.update({
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/coach': typeof CoachRoute
   '/homework': typeof HomeworkRoute
   '/lecture': typeof LectureRoute
+  '/settings': typeof SettingsRoute
   '/testimonials': typeof TestimonialsRoute
   '/api/chat': typeof ApiChatRoute
   '/api/tts': typeof ApiTtsRoute
@@ -75,6 +82,7 @@ export interface FileRoutesByTo {
   '/coach': typeof CoachRoute
   '/homework': typeof HomeworkRoute
   '/lecture': typeof LectureRoute
+  '/settings': typeof SettingsRoute
   '/testimonials': typeof TestimonialsRoute
   '/api/chat': typeof ApiChatRoute
   '/api/tts': typeof ApiTtsRoute
@@ -86,6 +94,7 @@ export interface FileRoutesById {
   '/coach': typeof CoachRoute
   '/homework': typeof HomeworkRoute
   '/lecture': typeof LectureRoute
+  '/settings': typeof SettingsRoute
   '/testimonials': typeof TestimonialsRoute
   '/api/chat': typeof ApiChatRoute
   '/api/tts': typeof ApiTtsRoute
@@ -98,6 +107,7 @@ export interface FileRouteTypes {
     | '/coach'
     | '/homework'
     | '/lecture'
+    | '/settings'
     | '/testimonials'
     | '/api/chat'
     | '/api/tts'
@@ -108,6 +118,7 @@ export interface FileRouteTypes {
     | '/coach'
     | '/homework'
     | '/lecture'
+    | '/settings'
     | '/testimonials'
     | '/api/chat'
     | '/api/tts'
@@ -118,6 +129,7 @@ export interface FileRouteTypes {
     | '/coach'
     | '/homework'
     | '/lecture'
+    | '/settings'
     | '/testimonials'
     | '/api/chat'
     | '/api/tts'
@@ -129,6 +141,7 @@ export interface RootRouteChildren {
   CoachRoute: typeof CoachRoute
   HomeworkRoute: typeof HomeworkRoute
   LectureRoute: typeof LectureRoute
+  SettingsRoute: typeof SettingsRoute
   TestimonialsRoute: typeof TestimonialsRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiTtsRoute: typeof ApiTtsRoute
@@ -141,6 +154,13 @@ declare module '@tanstack/react-router' {
       path: '/testimonials'
       fullPath: '/testimonials'
       preLoaderRoute: typeof TestimonialsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/lecture': {
@@ -201,6 +221,7 @@ const rootRouteChildren: RootRouteChildren = {
   CoachRoute: CoachRoute,
   HomeworkRoute: HomeworkRoute,
   LectureRoute: LectureRoute,
+  SettingsRoute: SettingsRoute,
   TestimonialsRoute: TestimonialsRoute,
   ApiChatRoute: ApiChatRoute,
   ApiTtsRoute: ApiTtsRoute,
@@ -208,13 +229,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

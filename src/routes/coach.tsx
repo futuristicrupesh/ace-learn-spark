@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { loadProfile } from "@/lib/profile";
 import { RatingPromptDialog, useRatingPrompt } from "@/components/testimonials";
+import { ApiKeyGate } from "@/components/api-key-gate";
+import { useApiKey } from "@/lib/user-api-key";
 import { Send, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/coach")({
@@ -25,6 +27,7 @@ function CoachPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const prompt = useRatingPrompt();
+  const { apiKey } = useApiKey();
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -46,7 +49,7 @@ function CoachPage() {
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-user-api-key": apiKey },
         body: JSON.stringify({
           messages: nextMessages,
           topic,
@@ -89,6 +92,7 @@ function CoachPage() {
         <p className="mt-2 text-muted-foreground">Hints first. Corrections in real time. Solutions only when you've earned them.</p>
       </section>
 
+      <ApiKeyGate>
       <div className="flex items-center gap-3 mb-4">
         <label className="text-xs uppercase tracking-wide text-muted-foreground">Topic</label>
         <Input value={topic} onChange={(e) => setTopic(e.target.value)} className="max-w-sm h-9" />
@@ -114,6 +118,8 @@ function CoachPage() {
           </Button>
         </div>
       </Card>
+
+      </ApiKeyGate>
 
       <RatingPromptDialog open={prompt.open} onOpenChange={prompt.setOpen} context={prompt.context} />
     </main>

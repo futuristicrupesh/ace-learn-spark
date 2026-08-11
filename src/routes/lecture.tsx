@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { loadProfile } from "@/lib/profile";
 import { generateLecture, type Lecture } from "@/lib/lectures.functions";
 import { RatingPromptDialog, useRatingPrompt } from "@/components/testimonials";
+import { ApiKeyGate } from "@/components/api-key-gate";
+import { useApiKey, loadApiKey } from "@/lib/user-api-key";
 import { Play, Pause, Loader2, CheckCircle2 } from "lucide-react";
 
 export const Route = createFileRoute("/lecture")({
@@ -21,12 +23,14 @@ function LecturePage() {
   const [lecture, setLecture] = useState<Lecture | null>(null);
   const [active, setActive] = useState(0);
   const prompt = useRatingPrompt();
+  const { apiKey } = useApiKey();
 
   const mutation = useMutation({
     mutationFn: async () => {
       const profile = loadProfile();
       return generateLecture({
         data: {
+          apiKey,
           topic,
           className: profile?.className ?? "10th Grade",
           country: profile?.country ?? "USA",
@@ -50,6 +54,7 @@ function LecturePage() {
         <p className="mt-2 text-muted-foreground">Four rigorous parts. Narration. Full transcript. Mastery checkpoints.</p>
       </section>
 
+      <ApiKeyGate>
       <form
         onSubmit={(e) => { e.preventDefault(); if (topic.trim()) mutation.mutate(); }}
         className="flex flex-col sm:flex-row gap-3 mb-8"
@@ -99,6 +104,8 @@ function LecturePage() {
           <LecturePart part={lecture.parts[active]} index={active} />
         </div>
       )}
+
+      </ApiKeyGate>
 
       <RatingPromptDialog open={prompt.open} onOpenChange={prompt.setOpen} context={prompt.context} />
     </main>
@@ -155,7 +162,7 @@ function AudioPlayer({ text }: { text: string }) {
     try {
       const res = await fetch("/api/tts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-user-api-key": loadApiKey() },
         body: JSON.stringify({ text }),
       });
       if (!res.ok) throw new Error(await res.text() || "TTS failed");

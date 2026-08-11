@@ -1,6 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { streamText, type ModelMessage } from "ai";
-import { createLovableAiGatewayProvider, requireGatewayKey } from "@/lib/ai-gateway.server";
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
@@ -16,6 +14,10 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const { geminiStreamText, normalizeKey, GeminiError } = await import(
+          "@/lib/gemini.server"
+        );
+
         let body: ChatBody;
         try {
           body = (await request.json()) as ChatBody;
@@ -45,22 +47,20 @@ Coaching rules:
 4. Be crisp, encouraging, and exam-focused. End most replies with a short next action.
 5. Use markdown: bold for key ideas, lists for steps, code blocks for equations/code.`;
 
-        const modelMessages: ModelMessage[] = history.map(
-          (m) => ({ role: m.role, content: m.content }) as ModelMessage,
-        );
-
         try {
-          const gateway = createLovableAiGatewayProvider(requireGatewayKey());
-          const result = streamText({
-            model: gateway("openai/gpt-5.5"),
-            instructions: system,
-            messages: modelMessages,
+          const apiKey = normalizeKey(request.headers.get("x-user-api-key"));
+          return await geminiStreamText({
+            apiKey,
+            system,
+            messages: history
+              .filter((m) => m && typeof m.content === "string" && m.content.trim())
+              .map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })),
+            signal: request.signal,
           });
-          return result.toTextStreamResponse();
         } catch (err) {
-          const msg = err instanceof Error ? err.message : "AI error";
-          const status = msg.includes("429") ? 429 : msg.includes("402") ? 402 : 500;
-          return new Response(msg, { status });
+          if (request.signal.aborted) return new Response(null, { status: 499 });
+          if (err instanceof GeminiError) return new Response(err.message, { status: err.status });
+          return new Response(err instanceof Error ? err.message : "AI error", { status: 500 });
         }
       },
     },

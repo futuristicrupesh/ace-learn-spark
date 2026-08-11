@@ -17,6 +17,8 @@ import {
   type Grade,
 } from "@/lib/homework.functions";
 import { RatingPromptDialog, useRatingPrompt } from "@/components/testimonials";
+import { ApiKeyGate } from "@/components/api-key-gate";
+import { useApiKey } from "@/lib/user-api-key";
 import { Loader2, Sparkles, RotateCw } from "lucide-react";
 
 export const Route = createFileRoute("/homework")({
@@ -47,12 +49,14 @@ function HomeworkPage() {
   const [grades, setGrades] = useState<Record<string, Grade>>({});
   const [flipped, setFlipped] = useState<Record<number, boolean>>({});
   const prompt = useRatingPrompt();
+  const { apiKey } = useApiKey();
 
   const generate = useMutation({
     mutationFn: async () => {
       const p = loadProfile();
       return generateHomeworkAndQuiz({
         data: {
+          apiKey,
           topic,
           className: p?.className ?? "10th Grade",
           country: p?.country ?? "USA",
@@ -69,6 +73,7 @@ function HomeworkPage() {
       const p = loadProfile();
       const result = await submitHomework({
         data: {
+          apiKey,
           topic: mission?.missionId ? topic : "General",
           className: p?.className ?? "10th Grade",
           educationBoard: p?.educationBoard ?? "Standard Board",
@@ -94,6 +99,7 @@ function HomeworkPage() {
         <p className="mt-2 text-muted-foreground">Exam-quality questions, revision flashcards, and strict AI grading.</p>
       </section>
 
+      <ApiKeyGate>
       <form
         onSubmit={(e) => { e.preventDefault(); if (topic.trim()) generate.mutate(); }}
         className="flex flex-col sm:flex-row gap-3 mb-8"
@@ -186,6 +192,8 @@ function HomeworkPage() {
           </section>
         </div>
       )}
+
+      </ApiKeyGate>
 
       <RatingPromptDialog open={prompt.open} onOpenChange={prompt.setOpen} context={prompt.context} />
     </main>
