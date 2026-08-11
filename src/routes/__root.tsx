@@ -122,6 +122,8 @@ function Nav() {
           <Link to="/coach" className={link} activeProps={{ className: active }}>Doubt Coach</Link>
           <Link to="/homework" className={link} activeProps={{ className: active }}>Homework</Link>
           <Link to="/testimonials" className={link} activeProps={{ className: active }}>Testimonials</Link>
+          <Link to="/settings" className={link} activeProps={{ className: active }}>AI Key</Link>
+
           {!loading && (user ? (
             <button onClick={signOut} className={link}>Sign out</button>
           ) : (
