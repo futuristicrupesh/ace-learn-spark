@@ -1,0 +1,229 @@
+// Server-only helpers that call Google Gemini with the END USER'S own API key.
+// No shared/app key is ever used for AI work.
+
+const BASE = "https://generativelanguage.googleapis.com/v1beta";
+
+export const TEXT_MODEL = "gemini-2.5-flash";
+export const TTS_MODEL = "gemini-2.5-flash-preview-tts";
+
+export class GeminiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export function normalizeKey(raw: unknown): string {
+  const key = typeof raw === "string" ? raw.trim() : "";
+  if (!key) {
+    throw new GeminiError(
+      "No Google AI key found. Add your free key in Settings to use the AI features.",
+      401,
+    );
+  }
+  return key;
+}
+
+function friendlyError(status: number, body: string): GeminiError {
+  let detail = body;
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: string; status?: string } };
+    detail = parsed.error?.message ?? body;
+  } catch {
+    /* keep raw */
+  }
+  if (status === 400 && /api key not valid|API_KEY_INVALID/i.test(detail)) {
+    return new GeminiError("That Google AI key isn't valid. Check it in Settings.", 401);
+  }
+  if (status === 429) {
+    return new GeminiError(
+      "Your Google AI key hit its rate limit. Wait a minute and try again.",
+      429,
+    );
+  }
+  if (status === 403) {
+    return new GeminiError(
+      "Your Google AI key doesn't have access to this model. Create a new key at aistudio.google.com.",
+      403,
+    );
+  }
+  return new GeminiError(detail || `AI request failed (${status})`, status);
+}
+
+type JsonSchema = Record<string, unknown>;
+
+export async function geminiJson<T>(opts: {
+  apiKey: string;
+  prompt: string;
+  schema: JsonSchema;
+  temperature?: number;
+  signal?: AbortSignal;
+}): Promise<T> {
+  const res = await fetch(
+    `${BASE}/models/${TEXT_MODEL}:generateContent?key=${encodeURIComponent(opts.apiKey)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: opts.signal,
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
+        generationConfig: {
+          temperature: opts.temperature ?? 0.3,
+          maxOutputTokens: 8192,
+          responseMimeType: "application/json",
+          responseSchema: opts.schema,
+        },
+      }),
+    },
+  );
+
+  if (!res.ok) throw friendlyError(res.status, await res.text().catch(() => ""));
+
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+  if (!text.trim()) throw new GeminiError("The AI returned an empty response. Try again.", 502);
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]) as T;
+    throw new GeminiError("The AI response couldn't be parsed. Try again.", 502);
+  }
+}
+
+/** Streams plain text deltas as a Response body. */
+export async function geminiStreamText(opts: {
+  apiKey: string;
+  system: string;
+  messages: { role: "user" | "assistant"; content: string }[];
+  signal?: AbortSignal;
+}): Promise<Response> {
+  const upstream = await fetch(
+    `${BASE}/models/${TEXT_MODEL}:streamGenerateContent?alt=sse&key=${encodeURIComponent(opts.apiKey)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: opts.signal,
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: opts.system }] },
+        contents: opts.messages.map((m) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }],
+        })),
+        generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
+      }),
+    },
+  );
+
+  if (!upstream.ok || !upstream.body) {
+    throw friendlyError(upstream.status, await upstream.text().catch(() => ""));
+  }
+
+  const reader = upstream.body.pipeThrough(new TextDecoderStream()).getReader();
+  const encoder = new TextEncoder();
+  let buffer = "";
+
+  const stream = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { value, done } = await reader.read();
+      if (done) {
+        controller.close();
+        return;
+      }
+      buffer += value;
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const payload = trimmed.slice(5).trim();
+        if (!payload || payload === "[DONE]") continue;
+        try {
+          const chunk = JSON.parse(payload) as {
+            candidates?: { content?: { parts?: { text?: string }[] } }[];
+          };
+          const text =
+            chunk.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+          if (text) controller.enqueue(encoder.encode(text));
+        } catch {
+          /* ignore partial frames */
+        }
+      }
+    },
+    cancel(reason) {
+      return reader.cancel(reason);
+    },
+  });
+
+  return new Response(stream, {
+    headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+  });
+}
+
+function pcmToWav(pcm: Uint8Array, sampleRate = 24000, channels = 1, bits = 16): Uint8Array {
+  const blockAlign = (channels * bits) / 8;
+  const byteRate = sampleRate * blockAlign;
+  const buffer = new ArrayBuffer(44 + pcm.length);
+  const view = new DataView(buffer);
+  const writeStr = (offset: number, s: string) => {
+    for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
+  };
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + pcm.length, true);
+  writeStr(8, "WAVE");
+  writeStr(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bits, true);
+  writeStr(36, "data");
+  view.setUint32(40, pcm.length, true);
+  const out = new Uint8Array(buffer);
+  out.set(pcm, 44);
+  return out;
+}
+
+export async function geminiTts(opts: {
+  apiKey: string;
+  text: string;
+  voice?: string;
+  signal?: AbortSignal;
+}): Promise<Uint8Array> {
+  const res = await fetch(
+    `${BASE}/models/${TTS_MODEL}:generateContent?key=${encodeURIComponent(opts.apiKey)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: opts.signal,
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: opts.text }] }],
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: opts.voice || "Kore" } },
+          },
+        },
+      }),
+    },
+  );
+
+  if (!res.ok) throw friendlyError(res.status, await res.text().catch(() => ""));
+
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { inlineData?: { data?: string } }[] } }[];
+  };
+  const b64 = data.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData
+    ?.data;
+  if (!b64) throw new GeminiError("No narration audio was returned. Try again.", 502);
+
+  const binary = atob(b64);
+  const pcm = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) pcm[i] = binary.charCodeAt(i);
+  return pcmToWav(pcm);
+}
