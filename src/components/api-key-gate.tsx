@@ -14,9 +14,10 @@ export function ApiKeyForm({ compact = false }: { compact?: boolean }) {
     const key = value.trim();
     if (!key) return;
     if (!looksLikeGoogleKey(key)) {
-      toast.error("That doesn't look like a Google AI key — use a standard key (AIza…) or an auth token (ya29…).");
+      toast.error("That doesn't look like a key — paste the full key or token with no spaces.");
       return;
     }
+
     set(key);
     setValue("");
     toast.success("Key saved. AceCoach now runs on your own free Google AI key.");
