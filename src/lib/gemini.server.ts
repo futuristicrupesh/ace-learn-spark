@@ -51,25 +51,56 @@ function friendlyError(status: number, body: string): GeminiError {
   return new GeminiError(detail || `AI request failed (${status})`, status);
 }
 
-/** OAuth 2.0 access tokens (auth keys) are sent as a bearer header; standard AIza keys go in the query. */
+/** Standard API keys (AIza…) go in the query string; every other credential type
+ *  (OAuth access tokens ya29…, AQ.… tokens, JWTs, service tokens) is sent as a bearer header.
+ *  If the first mode is rejected, we automatically retry with the other one. */
 export function isOAuthToken(key: string): boolean {
-  return key.startsWith("ya29.") || key.startsWith("Bearer ") || key.split(".").length === 3;
+  return !/^AIza[\w-]{10,}$/.test(key.trim());
 }
 
-function endpoint(model: string, method: string, apiKey: string, extra = ""): string {
+function endpointFor(model: string, method: string, apiKey: string, extra: string, asBearer: boolean): string {
   const base = `${BASE}/models/${model}:${method}`;
   const q = extra ? `?${extra}` : "";
-  if (isOAuthToken(apiKey)) return `${base}${q}`;
+  if (asBearer) return `${base}${q}`;
   return `${base}${q ? q + "&" : "?"}key=${encodeURIComponent(apiKey)}`;
 }
 
-function authHeaders(apiKey: string): Record<string, string> {
+function headersFor(apiKey: string, asBearer: boolean): Record<string, string> {
   const h: Record<string, string> = { "Content-Type": "application/json" };
-  if (isOAuthToken(apiKey)) {
-    h["Authorization"] = apiKey.startsWith("Bearer ") ? apiKey : `Bearer ${apiKey}`;
+  if (asBearer) {
+    h["Authorization"] = apiKey.startsWith("Bearer ") ? apiKey : `Bearer ${apiKey.replace(/^Bearer\s+/i, "")}`;
+  } else {
+    h["x-goog-api-key"] = apiKey;
   }
   return h;
 }
+
+/** Calls Gemini, transparently trying both credential styles so any key type works. */
+export async function geminiFetch(opts: {
+  model: string;
+  method: string;
+  apiKey: string;
+  body: unknown;
+  extra?: string;
+  signal?: AbortSignal;
+}): Promise<Response> {
+  const key = opts.apiKey.trim();
+  const modes = isOAuthToken(key) ? [true, false] : [false, true];
+  let last: Response | null = null;
+  for (const asBearer of modes) {
+    const res = await fetch(endpointFor(opts.model, opts.method, key, opts.extra ?? "", asBearer), {
+      method: "POST",
+      headers: headersFor(key, asBearer),
+      signal: opts.signal,
+      body: JSON.stringify(opts.body),
+    });
+    if (res.ok) return res;
+    last = res;
+    if (![400, 401, 403].includes(res.status)) break;
+  }
+  return last as Response;
+}
+
 
 type JsonSchema = Record<string, unknown>;
 
