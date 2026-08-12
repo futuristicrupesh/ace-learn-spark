@@ -14,7 +14,7 @@ export function ApiKeyForm({ compact = false }: { compact?: boolean }) {
     const key = value.trim();
     if (!key) return;
     if (!looksLikeGoogleKey(key)) {
-      toast.error("That doesn't look like a Google AI key — it should start with AIza.");
+      toast.error("That doesn't look like a Google AI key — use a standard key (AIza…) or an auth token (ya29…).");
       return;
     }
     set(key);
