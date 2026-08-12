@@ -151,22 +151,22 @@ export async function geminiStreamText(opts: {
   messages: { role: "user" | "assistant"; content: string }[];
   signal?: AbortSignal;
 }): Promise<Response> {
-  const upstream = await fetch(
-    endpoint(TEXT_MODEL, "streamGenerateContent", opts.apiKey, "alt=sse"),
-    {
-      method: "POST",
-      headers: authHeaders(opts.apiKey),
-      signal: opts.signal,
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: opts.system }] },
-        contents: opts.messages.map((m) => ({
-          role: m.role === "assistant" ? "model" : "user",
-          parts: [{ text: m.content }],
-        })),
-        generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
-      }),
+  const upstream = await geminiFetch({
+    model: TEXT_MODEL,
+    method: "streamGenerateContent",
+    extra: "alt=sse",
+    apiKey: opts.apiKey,
+    signal: opts.signal,
+    body: {
+      systemInstruction: { parts: [{ text: opts.system }] },
+      contents: opts.messages.map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      })),
+      generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
     },
-  );
+  });
+
 
   if (!upstream.ok || !upstream.body) {
     throw friendlyError(upstream.status, await upstream.text().catch(() => ""));
