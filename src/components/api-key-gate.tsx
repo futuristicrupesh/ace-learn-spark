@@ -101,10 +101,13 @@ export function ApiKeyGate({ children }: { children: React.ReactNode }) {
           </ol>
           <p className="mt-3 text-sm text-muted-foreground">
             <strong className="text-foreground">
-              Standard API keys (AIza…) and auth tokens (ya29…) both work. Out of credits? Generate
-              a new key. Storage full? Delete unused keys and make new ones.
+              Every kind of key works — standard API keys (AIza…), auth / OAuth access tokens
+              (ya29…), AQ.… tokens (like AQ.Ab8RN6…), JWT-style tokens, and any other Google
+              credential. Out of credits? Generate a new key. Storage full? Delete unused keys and
+              make new ones.
             </strong>
           </p>
+
           <div className="mt-5">
             <ApiKeyForm />
           </div>
