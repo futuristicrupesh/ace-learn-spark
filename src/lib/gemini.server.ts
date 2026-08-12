@@ -111,23 +111,22 @@ export async function geminiJson<T>(opts: {
   temperature?: number;
   signal?: AbortSignal;
 }): Promise<T> {
-  const res = await fetch(
-    endpoint(TEXT_MODEL, "generateContent", opts.apiKey),
-    {
-      method: "POST",
-      headers: authHeaders(opts.apiKey),
-      signal: opts.signal,
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
-        generationConfig: {
-          temperature: opts.temperature ?? 0.3,
-          maxOutputTokens: 8192,
-          responseMimeType: "application/json",
-          responseSchema: opts.schema,
-        },
-      }),
+  const res = await geminiFetch({
+    model: TEXT_MODEL,
+    method: "generateContent",
+    apiKey: opts.apiKey,
+    signal: opts.signal,
+    body: {
+      contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
+      generationConfig: {
+        temperature: opts.temperature ?? 0.3,
+        maxOutputTokens: 8192,
+        responseMimeType: "application/json",
+        responseSchema: opts.schema,
+      },
     },
-  );
+  });
+
 
   if (!res.ok) throw friendlyError(res.status, await res.text().catch(() => ""));
 
