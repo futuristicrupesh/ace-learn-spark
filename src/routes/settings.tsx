@@ -57,6 +57,27 @@ function SettingsPage() {
             <li>Click "Create API key".</li>
             <li>Copy it and paste it above.</li>
           </ol>
+          <p>
+            <strong className="text-foreground">
+              Both standard API keys (AIza…) and auth / OAuth access tokens (ya29… or JWT-style)
+              work here.
+            </strong>{" "}
+            Paste whichever one you have — AceCoach sends each type the correct way.
+          </p>
+          <p>
+            <strong className="text-foreground">
+              Ran out of credits? You can always generate a brand-new API key — it's free and takes
+              seconds.
+            </strong>{" "}
+            Just open Google AI Studio again, click "Create API key", and paste the new one above.
+          </p>
+          <p>
+            <strong className="text-foreground">
+              Key storage full? Delete the API keys you don't use anymore and create new ones.
+            </strong>{" "}
+            Google limits how many keys a project can hold, so removing old keys instantly frees up
+            room for fresh ones.
+          </p>
           <p className="flex items-start gap-2 pt-2">
             <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0 text-success" />
             Your key is stored only in this browser. It is never saved to our database and is sent
