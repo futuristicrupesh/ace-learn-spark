@@ -245,23 +245,22 @@ export async function geminiTts(opts: {
   voice?: string;
   signal?: AbortSignal;
 }): Promise<Uint8Array> {
-  const res = await fetch(
-    endpoint(TTS_MODEL, "generateContent", opts.apiKey),
-    {
-      method: "POST",
-      headers: authHeaders(opts.apiKey),
-      signal: opts.signal,
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: opts.text }] }],
-        generationConfig: {
-          responseModalities: ["AUDIO"],
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: opts.voice || "Kore" } },
-          },
+  const res = await geminiFetch({
+    model: TTS_MODEL,
+    method: "generateContent",
+    apiKey: opts.apiKey,
+    signal: opts.signal,
+    body: {
+      contents: [{ role: "user", parts: [{ text: opts.text }] }],
+      generationConfig: {
+        responseModalities: ["AUDIO"],
+        speechConfig: {
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: opts.voice || "Kore" } },
         },
-      }),
+      },
     },
-  );
+  });
+
 
   if (!res.ok) throw friendlyError(res.status, await res.text().catch(() => ""));
 
