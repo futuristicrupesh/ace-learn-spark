@@ -14,7 +14,7 @@ export function ApiKeyForm({ compact = false }: { compact?: boolean }) {
     const key = value.trim();
     if (!key) return;
     if (!looksLikeGoogleKey(key)) {
-      toast.error("That doesn't look like a Google AI key — it should start with AIza.");
+      toast.error("That doesn't look like a Google AI key — use a standard key (AIza…) or an auth token (ya29…).");
       return;
     }
     set(key);
@@ -55,7 +55,7 @@ export function ApiKeyForm({ compact = false }: { compact?: boolean }) {
           }}
           type="password"
           autoComplete="off"
-          placeholder="Paste your key (starts with AIza…)"
+          placeholder="Paste your key (AIza… or ya29… auth token)"
           className="h-11"
         />
         <Button onClick={save} disabled={!value.trim()} className="h-11 px-6">
@@ -98,6 +98,12 @@ export function ApiKeyGate({ children }: { children: React.ReactNode }) {
             <li>Click "Create API key" and copy it.</li>
             <li>Paste it below — that's it.</li>
           </ol>
+          <p className="mt-3 text-sm text-muted-foreground">
+            <strong className="text-foreground">
+              Standard API keys (AIza…) and auth tokens (ya29…) both work. Out of credits? Generate
+              a new key. Storage full? Delete unused keys and make new ones.
+            </strong>
+          </p>
           <div className="mt-5">
             <ApiKeyForm />
           </div>

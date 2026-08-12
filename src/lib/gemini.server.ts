@@ -51,6 +51,26 @@ function friendlyError(status: number, body: string): GeminiError {
   return new GeminiError(detail || `AI request failed (${status})`, status);
 }
 
+/** OAuth 2.0 access tokens (auth keys) are sent as a bearer header; standard AIza keys go in the query. */
+export function isOAuthToken(key: string): boolean {
+  return key.startsWith("ya29.") || key.startsWith("Bearer ") || key.split(".").length === 3;
+}
+
+function endpoint(model: string, method: string, apiKey: string, extra = ""): string {
+  const base = `${BASE}/models/${model}:${method}`;
+  const q = extra ? `?${extra}` : "";
+  if (isOAuthToken(apiKey)) return `${base}${q}`;
+  return `${base}${q ? q + "&" : "?"}key=${encodeURIComponent(apiKey)}`;
+}
+
+function authHeaders(apiKey: string): Record<string, string> {
+  const h: Record<string, string> = { "Content-Type": "application/json" };
+  if (isOAuthToken(apiKey)) {
+    h["Authorization"] = apiKey.startsWith("Bearer ") ? apiKey : `Bearer ${apiKey}`;
+  }
+  return h;
+}
+
 type JsonSchema = Record<string, unknown>;
 
 export async function geminiJson<T>(opts: {
@@ -61,10 +81,10 @@ export async function geminiJson<T>(opts: {
   signal?: AbortSignal;
 }): Promise<T> {
   const res = await fetch(
-    `${BASE}/models/${TEXT_MODEL}:generateContent?key=${encodeURIComponent(opts.apiKey)}`,
+    endpoint(TEXT_MODEL, "generateContent", opts.apiKey),
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(opts.apiKey),
       signal: opts.signal,
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
@@ -102,10 +122,10 @@ export async function geminiStreamText(opts: {
   signal?: AbortSignal;
 }): Promise<Response> {
   const upstream = await fetch(
-    `${BASE}/models/${TEXT_MODEL}:streamGenerateContent?alt=sse&key=${encodeURIComponent(opts.apiKey)}`,
+    endpoint(TEXT_MODEL, "streamGenerateContent", opts.apiKey, "alt=sse"),
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(opts.apiKey),
       signal: opts.signal,
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: opts.system }] },
@@ -196,10 +216,10 @@ export async function geminiTts(opts: {
   signal?: AbortSignal;
 }): Promise<Uint8Array> {
   const res = await fetch(
-    `${BASE}/models/${TTS_MODEL}:generateContent?key=${encodeURIComponent(opts.apiKey)}`,
+    endpoint(TTS_MODEL, "generateContent", opts.apiKey),
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(opts.apiKey),
       signal: opts.signal,
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: opts.text }] }],
