@@ -56,7 +56,7 @@ export function ApiKeyForm({ compact = false }: { compact?: boolean }) {
           }}
           type="password"
           autoComplete="off"
-          placeholder="Paste your key (AIza… or ya29… auth token)"
+          placeholder="Paste any key or token (AIza… · ya29… · AQ.… · JWT)"
           className="h-11"
         />
         <Button onClick={save} disabled={!value.trim()} className="h-11 px-6">
