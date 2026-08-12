@@ -30,14 +30,15 @@ export function clearApiKey() {
   window.dispatchEvent(new Event("ace-api-key-change"));
 }
 
-/** Accepts both standard Google AI keys (AIza…) and auth/OAuth access tokens (ya29… or JWTs). */
+/** Accepts every Google credential style: standard keys (AIza…), OAuth access tokens
+ *  (ya29…), AQ.… tokens, JWT-style auth tokens, and any other opaque token. */
 export function looksLikeGoogleKey(key: string) {
   const k = key.trim().replace(/^Bearer\s+/i, "");
-  if (/^AIza[\w-]{20,}$/.test(k)) return true; // standard API key
-  if (/^ya29\.[\w./-]{20,}$/.test(k)) return true; // OAuth access token
-  if (k.split(".").length === 3 && k.length > 40) return true; // JWT-style auth token
-  return false;
+  if (k.length < 15) return false;
+  if (/\s/.test(k)) return false;
+  return true;
 }
+
 
 export function useApiKey() {
   const [apiKey, setKey] = useState("");

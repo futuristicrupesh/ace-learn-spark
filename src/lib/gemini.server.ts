@@ -51,25 +51,56 @@ function friendlyError(status: number, body: string): GeminiError {
   return new GeminiError(detail || `AI request failed (${status})`, status);
 }
 
-/** OAuth 2.0 access tokens (auth keys) are sent as a bearer header; standard AIza keys go in the query. */
+/** Standard API keys (AIza…) go in the query string; every other credential type
+ *  (OAuth access tokens ya29…, AQ.… tokens, JWTs, service tokens) is sent as a bearer header.
+ *  If the first mode is rejected, we automatically retry with the other one. */
 export function isOAuthToken(key: string): boolean {
-  return key.startsWith("ya29.") || key.startsWith("Bearer ") || key.split(".").length === 3;
+  return !/^AIza[\w-]{10,}$/.test(key.trim());
 }
 
-function endpoint(model: string, method: string, apiKey: string, extra = ""): string {
+function endpointFor(model: string, method: string, apiKey: string, extra: string, asBearer: boolean): string {
   const base = `${BASE}/models/${model}:${method}`;
   const q = extra ? `?${extra}` : "";
-  if (isOAuthToken(apiKey)) return `${base}${q}`;
+  if (asBearer) return `${base}${q}`;
   return `${base}${q ? q + "&" : "?"}key=${encodeURIComponent(apiKey)}`;
 }
 
-function authHeaders(apiKey: string): Record<string, string> {
+function headersFor(apiKey: string, asBearer: boolean): Record<string, string> {
   const h: Record<string, string> = { "Content-Type": "application/json" };
-  if (isOAuthToken(apiKey)) {
-    h["Authorization"] = apiKey.startsWith("Bearer ") ? apiKey : `Bearer ${apiKey}`;
+  if (asBearer) {
+    h["Authorization"] = apiKey.startsWith("Bearer ") ? apiKey : `Bearer ${apiKey.replace(/^Bearer\s+/i, "")}`;
+  } else {
+    h["x-goog-api-key"] = apiKey;
   }
   return h;
 }
+
+/** Calls Gemini, transparently trying both credential styles so any key type works. */
+export async function geminiFetch(opts: {
+  model: string;
+  method: string;
+  apiKey: string;
+  body: unknown;
+  extra?: string;
+  signal?: AbortSignal;
+}): Promise<Response> {
+  const key = opts.apiKey.trim();
+  const modes = isOAuthToken(key) ? [true, false] : [false, true];
+  let last: Response | null = null;
+  for (const asBearer of modes) {
+    const res = await fetch(endpointFor(opts.model, opts.method, key, opts.extra ?? "", asBearer), {
+      method: "POST",
+      headers: headersFor(key, asBearer),
+      signal: opts.signal,
+      body: JSON.stringify(opts.body),
+    });
+    if (res.ok) return res;
+    last = res;
+    if (![400, 401, 403].includes(res.status)) break;
+  }
+  return last as Response;
+}
+
 
 type JsonSchema = Record<string, unknown>;
 
@@ -80,23 +111,22 @@ export async function geminiJson<T>(opts: {
   temperature?: number;
   signal?: AbortSignal;
 }): Promise<T> {
-  const res = await fetch(
-    endpoint(TEXT_MODEL, "generateContent", opts.apiKey),
-    {
-      method: "POST",
-      headers: authHeaders(opts.apiKey),
-      signal: opts.signal,
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
-        generationConfig: {
-          temperature: opts.temperature ?? 0.3,
-          maxOutputTokens: 8192,
-          responseMimeType: "application/json",
-          responseSchema: opts.schema,
-        },
-      }),
+  const res = await geminiFetch({
+    model: TEXT_MODEL,
+    method: "generateContent",
+    apiKey: opts.apiKey,
+    signal: opts.signal,
+    body: {
+      contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
+      generationConfig: {
+        temperature: opts.temperature ?? 0.3,
+        maxOutputTokens: 8192,
+        responseMimeType: "application/json",
+        responseSchema: opts.schema,
+      },
     },
-  );
+  });
+
 
   if (!res.ok) throw friendlyError(res.status, await res.text().catch(() => ""));
 
@@ -121,22 +151,22 @@ export async function geminiStreamText(opts: {
   messages: { role: "user" | "assistant"; content: string }[];
   signal?: AbortSignal;
 }): Promise<Response> {
-  const upstream = await fetch(
-    endpoint(TEXT_MODEL, "streamGenerateContent", opts.apiKey, "alt=sse"),
-    {
-      method: "POST",
-      headers: authHeaders(opts.apiKey),
-      signal: opts.signal,
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: opts.system }] },
-        contents: opts.messages.map((m) => ({
-          role: m.role === "assistant" ? "model" : "user",
-          parts: [{ text: m.content }],
-        })),
-        generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
-      }),
+  const upstream = await geminiFetch({
+    model: TEXT_MODEL,
+    method: "streamGenerateContent",
+    extra: "alt=sse",
+    apiKey: opts.apiKey,
+    signal: opts.signal,
+    body: {
+      systemInstruction: { parts: [{ text: opts.system }] },
+      contents: opts.messages.map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      })),
+      generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
     },
-  );
+  });
+
 
   if (!upstream.ok || !upstream.body) {
     throw friendlyError(upstream.status, await upstream.text().catch(() => ""));
@@ -215,23 +245,22 @@ export async function geminiTts(opts: {
   voice?: string;
   signal?: AbortSignal;
 }): Promise<Uint8Array> {
-  const res = await fetch(
-    endpoint(TTS_MODEL, "generateContent", opts.apiKey),
-    {
-      method: "POST",
-      headers: authHeaders(opts.apiKey),
-      signal: opts.signal,
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: opts.text }] }],
-        generationConfig: {
-          responseModalities: ["AUDIO"],
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: opts.voice || "Kore" } },
-          },
+  const res = await geminiFetch({
+    model: TTS_MODEL,
+    method: "generateContent",
+    apiKey: opts.apiKey,
+    signal: opts.signal,
+    body: {
+      contents: [{ role: "user", parts: [{ text: opts.text }] }],
+      generationConfig: {
+        responseModalities: ["AUDIO"],
+        speechConfig: {
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: opts.voice || "Kore" } },
         },
-      }),
+      },
     },
-  );
+  });
+
 
   if (!res.ok) throw friendlyError(res.status, await res.text().catch(() => ""));
 

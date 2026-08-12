@@ -59,11 +59,14 @@ function SettingsPage() {
           </ol>
           <p>
             <strong className="text-foreground">
-              Both standard API keys (AIza…) and auth / OAuth access tokens (ya29… or JWT-style)
-              work here.
+              All key types work here — standard API keys (AIza…), auth / OAuth access tokens
+              (ya29…), AQ.… tokens (e.g. AQ.Ab8RN6…), JWT-style auth tokens, and any other Google
+              credential.
             </strong>{" "}
-            Paste whichever one you have — AceCoach sends each type the correct way.
+            Paste whichever one you have — AceCoach detects the type and sends it the correct way,
+            and automatically retries the other way if needed.
           </p>
+
           <p>
             <strong className="text-foreground">
               Ran out of credits? You can always generate a brand-new API key — it's free and takes

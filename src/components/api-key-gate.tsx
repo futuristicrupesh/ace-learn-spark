@@ -14,9 +14,10 @@ export function ApiKeyForm({ compact = false }: { compact?: boolean }) {
     const key = value.trim();
     if (!key) return;
     if (!looksLikeGoogleKey(key)) {
-      toast.error("That doesn't look like a Google AI key — use a standard key (AIza…) or an auth token (ya29…).");
+      toast.error("That doesn't look like a key — paste the full key or token with no spaces.");
       return;
     }
+
     set(key);
     setValue("");
     toast.success("Key saved. AceCoach now runs on your own free Google AI key.");
@@ -55,7 +56,7 @@ export function ApiKeyForm({ compact = false }: { compact?: boolean }) {
           }}
           type="password"
           autoComplete="off"
-          placeholder="Paste your key (AIza… or ya29… auth token)"
+          placeholder="Paste any key or token (AIza… · ya29… · AQ.… · JWT)"
           className="h-11"
         />
         <Button onClick={save} disabled={!value.trim()} className="h-11 px-6">
@@ -100,10 +101,13 @@ export function ApiKeyGate({ children }: { children: React.ReactNode }) {
           </ol>
           <p className="mt-3 text-sm text-muted-foreground">
             <strong className="text-foreground">
-              Standard API keys (AIza…) and auth tokens (ya29…) both work. Out of credits? Generate
-              a new key. Storage full? Delete unused keys and make new ones.
+              Every kind of key works — standard API keys (AIza…), auth / OAuth access tokens
+              (ya29…), AQ.… tokens (like AQ.Ab8RN6…), JWT-style tokens, and any other Google
+              credential. Out of credits? Generate a new key. Storage full? Delete unused keys and
+              make new ones.
             </strong>
           </p>
+
           <div className="mt-5">
             <ApiKeyForm />
           </div>
