@@ -3,8 +3,29 @@
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta";
 
-export const TEXT_MODEL = "gemini-2.5-flash";
-export const TTS_MODEL = "gemini-2.5-flash-preview-tts";
+// Model IDs are tried in order; if one is retired/unavailable for a given key
+// we automatically fall back to the next so students never see a hard failure.
+export const TEXT_MODELS = [
+  "gemini-flash-latest",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-flash-lite-latest",
+  "gemini-2.0-flash-lite",
+];
+export const TTS_MODELS = [
+  "gemini-2.5-flash-preview-tts",
+  "gemini-2.5-pro-preview-tts",
+];
+export const TEXT_MODEL = TEXT_MODELS[0];
+export const TTS_MODEL = TTS_MODELS[0];
+
+/** True when the failure is "this model isn't available", so another model may work. */
+function isModelUnavailable(status: number, body: string): boolean {
+  if (status === 404) return true;
+  return /no longer available|not found|not supported|unsupported model|does not exist|migrate-to-interactions/i.test(
+    body,
+  );
+}
 
 export class GeminiError extends Error {
   status: number;
@@ -42,6 +63,12 @@ function friendlyError(status: number, body: string): GeminiError {
       429,
     );
   }
+  if (isModelUnavailable(status, detail)) {
+    return new GeminiError(
+      "Your Google AI key can't reach any available Gemini model right now. Generate a fresh key at aistudio.google.com and paste it in the AI Key page.",
+      status === 404 ? 404 : status,
+    );
+  }
   if (status === 403) {
     return new GeminiError(
       "Your Google AI key doesn't have access to this model. Create a new key at aistudio.google.com.",
@@ -77,7 +104,7 @@ function headersFor(apiKey: string, asBearer: boolean): Record<string, string> {
 
 /** Calls Gemini, transparently trying both credential styles so any key type works. */
 export async function geminiFetch(opts: {
-  model: string;
+  model: string | string[];
   method: string;
   apiKey: string;
   body: unknown;
@@ -86,17 +113,27 @@ export async function geminiFetch(opts: {
 }): Promise<Response> {
   const key = opts.apiKey.trim();
   const modes = isOAuthToken(key) ? [true, false] : [false, true];
+  const models = Array.isArray(opts.model) ? opts.model : [opts.model];
   let last: Response | null = null;
-  for (const asBearer of modes) {
-    const res = await fetch(endpointFor(opts.model, opts.method, key, opts.extra ?? "", asBearer), {
-      method: "POST",
-      headers: headersFor(key, asBearer),
-      signal: opts.signal,
-      body: JSON.stringify(opts.body),
-    });
-    if (res.ok) return res;
-    last = res;
-    if (![400, 401, 403].includes(res.status)) break;
+  for (const model of models) {
+    let modelUnavailable = false;
+    for (const asBearer of modes) {
+      const res = await fetch(endpointFor(model, opts.method, key, opts.extra ?? "", asBearer), {
+        method: "POST",
+        headers: headersFor(key, asBearer),
+        signal: opts.signal,
+        body: JSON.stringify(opts.body),
+      });
+      if (res.ok) return res;
+      const text = await res.text().catch(() => "");
+      last = new Response(text, { status: res.status });
+      if (isModelUnavailable(res.status, text)) {
+        modelUnavailable = true;
+        break;
+      }
+      if (![400, 401, 403].includes(res.status)) break;
+    }
+    if (!modelUnavailable) break;
   }
   return last as Response;
 }
@@ -112,7 +149,7 @@ export async function geminiJson<T>(opts: {
   signal?: AbortSignal;
 }): Promise<T> {
   const res = await geminiFetch({
-    model: TEXT_MODEL,
+    model: TEXT_MODELS,
     method: "generateContent",
     apiKey: opts.apiKey,
     signal: opts.signal,
@@ -152,7 +189,7 @@ export async function geminiStreamText(opts: {
   signal?: AbortSignal;
 }): Promise<Response> {
   const upstream = await geminiFetch({
-    model: TEXT_MODEL,
+    model: TEXT_MODELS,
     method: "streamGenerateContent",
     extra: "alt=sse",
     apiKey: opts.apiKey,
@@ -246,7 +283,7 @@ export async function geminiTts(opts: {
   signal?: AbortSignal;
 }): Promise<Uint8Array> {
   const res = await geminiFetch({
-    model: TTS_MODEL,
+    model: TTS_MODELS,
     method: "generateContent",
     apiKey: opts.apiKey,
     signal: opts.signal,

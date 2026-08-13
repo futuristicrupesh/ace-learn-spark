@@ -146,10 +146,12 @@ function AudioPlayer({ text }: { text: string }) {
   const [status, setStatus] = useState<"idle" | "loading" | "playing" | "paused">("idle");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const urlRef = useRef<string | null>(null);
+  const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => () => {
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     audioRef.current?.pause();
+    if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
   }, []);
 
   async function play() {
@@ -177,6 +179,22 @@ function AudioPlayer({ text }: { text: string }) {
       await audio.play();
       setStatus("playing");
     } catch (err) {
+      // Never leave the student stuck: fall back to the browser's own voice.
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        try {
+          window.speechSynthesis.cancel();
+          const utter = new SpeechSynthesisUtterance(text);
+          utter.rate = 1;
+          utter.onend = () => setStatus("idle");
+          speechRef.current = utter;
+          window.speechSynthesis.speak(utter);
+          setStatus("playing");
+          toast.message("Using your device's voice for narration.");
+          return;
+        } catch {
+          /* fall through to error */
+        }
+      }
       setStatus("idle");
       toast.error(err instanceof Error ? err.message : "Audio failed");
     }
@@ -184,6 +202,10 @@ function AudioPlayer({ text }: { text: string }) {
 
   function pause() {
     audioRef.current?.pause();
+    if (speechRef.current && typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      speechRef.current = null;
+    }
     setStatus("paused");
   }
 
