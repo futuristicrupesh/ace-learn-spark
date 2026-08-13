@@ -63,6 +63,12 @@ function friendlyError(status: number, body: string): GeminiError {
       429,
     );
   }
+  if (isModelUnavailable(status, detail)) {
+    return new GeminiError(
+      "Your Google AI key can't reach any available Gemini model right now. Generate a fresh key at aistudio.google.com and paste it in the AI Key page.",
+      status === 404 ? 404 : status,
+    );
+  }
   if (status === 403) {
     return new GeminiError(
       "Your Google AI key doesn't have access to this model. Create a new key at aistudio.google.com.",
@@ -120,7 +126,7 @@ export async function geminiFetch(opts: {
       });
       if (res.ok) return res;
       const text = await res.text().catch(() => "");
-      last = new Response(text, { status: res.status, headers: res.headers });
+      last = new Response(text, { status: res.status });
       if (isModelUnavailable(res.status, text)) {
         modelUnavailable = true;
         break;
