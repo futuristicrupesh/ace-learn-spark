@@ -146,10 +146,12 @@ function AudioPlayer({ text }: { text: string }) {
   const [status, setStatus] = useState<"idle" | "loading" | "playing" | "paused">("idle");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const urlRef = useRef<string | null>(null);
+  const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => () => {
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     audioRef.current?.pause();
+    if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
   }, []);
 
   async function play() {
@@ -200,6 +202,10 @@ function AudioPlayer({ text }: { text: string }) {
 
   function pause() {
     audioRef.current?.pause();
+    if (speechRef.current && typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      speechRef.current = null;
+    }
     setStatus("paused");
   }
 
