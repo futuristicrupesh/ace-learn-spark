@@ -59,8 +59,14 @@ Coaching rules:
           });
         } catch (err) {
           if (request.signal.aborted) return new Response(null, { status: 499 });
-          if (err instanceof GeminiError) return new Response(err.message, { status: err.status });
-          return new Response(err instanceof Error ? err.message : "AI error", { status: 500 });
+          const lastQuestion = history.filter((message) => message.role === "user").at(-1)?.content;
+          const fallback = `**Let's keep learning — step by step.**\n\nThe live tutor is briefly busy, so use this reliable exam method for **${topic}**:\n\n1. Write down exactly what the question gives you.\n2. Name the rule, formula, or key concept that connects those facts.\n3. Apply it one step at a time and check units, signs, and keywords.\n4. Compare your result with what the question actually asks.\n\n**Your next move:** Tell me what you already know about “${lastQuestion ?? topic}” and the first step you tried. I’ll help you isolate the gap.`;
+          const message = err instanceof GeminiError && err.status < 500 && err.status !== 429
+            ? `${fallback}\n\n_Your saved AI key may need refreshing in AI Key settings._`
+            : fallback;
+          return new Response(message, {
+            headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+          });
         }
       },
     },

@@ -7,10 +7,9 @@ const BASE = "https://generativelanguage.googleapis.com/v1beta";
 // we automatically fall back to the next so students never see a hard failure.
 export const TEXT_MODELS = [
   "gemini-flash-latest",
+  "gemini-2.5-flash-lite",
   "gemini-2.5-flash",
-  "gemini-2.0-flash",
   "gemini-flash-lite-latest",
-  "gemini-2.0-flash-lite",
 ];
 export const TTS_MODELS = [
   "gemini-2.5-flash-preview-tts",
@@ -25,6 +24,40 @@ function isModelUnavailable(status: number, body: string): boolean {
   return /no longer available|not found|not supported|unsupported model|does not exist|migrate-to-interactions/i.test(
     body,
   );
+}
+
+function isTransientFailure(status: number, body: string): boolean {
+  return (
+    status === 408 ||
+    status === 409 ||
+    status === 429 ||
+    status >= 500 ||
+    /high demand|overloaded|temporarily unavailable|resource exhausted|try again later/i.test(body)
+  );
+}
+
+function retryDelay(response: Response, attempt: number): number {
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds)) return Math.min(seconds * 1_000, 15_000);
+  }
+  return Math.min(600 * 2 ** attempt + Math.random() * 400, 8_000);
+}
+
+async function waitForRetry(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) throw new DOMException("Request cancelled", "AbortError");
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(new DOMException("Request cancelled", "AbortError"));
+      },
+      { once: true },
+    );
+  });
 }
 
 export class GeminiError extends Error {
@@ -116,26 +149,45 @@ export async function geminiFetch(opts: {
   const models = Array.isArray(opts.model) ? opts.model : [opts.model];
   let last: Response | null = null;
   for (const model of models) {
-    let modelUnavailable = false;
     for (const asBearer of modes) {
-      const res = await fetch(endpointFor(model, opts.method, key, opts.extra ?? "", asBearer), {
-        method: "POST",
-        headers: headersFor(key, asBearer),
-        signal: opts.signal,
-        body: JSON.stringify(opts.body),
-      });
-      if (res.ok) return res;
-      const text = await res.text().catch(() => "");
-      last = new Response(text, { status: res.status });
-      if (isModelUnavailable(res.status, text)) {
-        modelUnavailable = true;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        let res: Response;
+        try {
+          res = await fetch(endpointFor(model, opts.method, key, opts.extra ?? "", asBearer), {
+            method: "POST",
+            headers: headersFor(key, asBearer),
+            signal: opts.signal,
+            body: JSON.stringify(opts.body),
+          });
+        } catch (error) {
+          if (opts.signal?.aborted) throw error;
+          if (attempt < 2) {
+            await waitForRetry(600 * 2 ** attempt + Math.random() * 400, opts.signal);
+            continue;
+          }
+          last = new Response("The AI service could not be reached.", { status: 503 });
+          break;
+        }
+        if (res.ok) return res;
+        const text = await res.text().catch(() => "");
+        last = new Response(text, {
+          status: res.status,
+          headers: { "retry-after": res.headers.get("retry-after") ?? "" },
+        });
+        if (isTransientFailure(res.status, text) && attempt < 2) {
+          await waitForRetry(retryDelay(res, attempt), opts.signal);
+          continue;
+        }
         break;
       }
-      if (![400, 401, 403].includes(res.status)) break;
+
+      if (!last) continue;
+      const body = await last.clone().text().catch(() => "");
+      if (isModelUnavailable(last.status, body) || isTransientFailure(last.status, body)) break;
+      if (![400, 401, 403].includes(last.status)) break;
     }
-    if (!modelUnavailable) break;
   }
-  return last as Response;
+  return last ?? new Response("The AI service could not be reached.", { status: 503 });
 }
 
 
