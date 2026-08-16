@@ -209,7 +209,8 @@ function RatingPicker({ rating, setRating }: { rating: number; setRating: (n: nu
 }
 
 export function TestimonialForm({ onPosted }: { onPosted: () => void }) {
-  const [name, setName] = useState("");
+  const { user } = useAuth();
+  const name = useDisplayName();
   const [role, setRole] = useState("");
   const [message, setMessage] = useState("");
   const [rating, setRating] = useState(5);
@@ -217,20 +218,23 @@ export function TestimonialForm({ onPosted }: { onPosted: () => void }) {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const ok = await submit({ name, role, message, rating });
+    const ok = await submit({ role, message, rating });
     if (!ok) return;
-    setName(""); setRole(""); setMessage(""); setRating(5);
+    setRole(""); setMessage(""); setRating(5);
     onPosted();
   }
 
   return (
     <Card className="p-6">
       <h2 className="text-lg font-semibold">Share your experience</h2>
+      {!user ? (
+        <div className="mt-4"><SignInToRate /></div>
+      ) : (
       <form onSubmit={onSubmit} className="mt-4 grid gap-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">Your name</Label>
-            <Input required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
+            <Input value={name} readOnly disabled className="bg-muted/50" />
           </div>
           <div className="grid gap-1.5">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">Class / role (optional)</Label>
@@ -247,9 +251,11 @@ export function TestimonialForm({ onPosted }: { onPosted: () => void }) {
         </div>
         <Button type="submit" disabled={busy}>{busy ? "Posting…" : "Post testimonial"}</Button>
       </form>
+      )}
     </Card>
   );
 }
+
 
 /**
  * Asks the student to rate AceCoach right after they finish an AI task.
