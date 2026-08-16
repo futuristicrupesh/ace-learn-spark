@@ -39,12 +39,18 @@ function AuthPage() {
     setBusy(true);
     try {
       if (mode === "signup") {
+        const cleanName = name.trim();
+        if (cleanName.length < 2) {
+          toast.error("Please enter your name — it is shown on your testimonials.");
+          setBusy(false);
+          return;
+        }
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: window.location.origin,
-            data: { student_name: name || email.split("@")[0] },
+            data: { student_name: cleanName, full_name: cleanName },
           },
         });
         if (error) throw error;
@@ -93,7 +99,17 @@ function AuthPage() {
           {mode === "signup" && (
             <div className="grid gap-1.5">
               <Label className="text-xs uppercase tracking-wide text-muted-foreground">Your name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Aarav" />
+              <Input
+                required
+                minLength={2}
+                maxLength={80}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Aarav"
+              />
+              <p className="text-xs text-muted-foreground">
+                This name is locked to your account and shown on your testimonials.
+              </p>
             </div>
           )}
           <div className="grid gap-1.5">
