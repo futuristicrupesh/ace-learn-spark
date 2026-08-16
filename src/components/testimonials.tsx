@@ -324,6 +324,8 @@ export function RatingPromptDialog({
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Later</Button>
           </div>
         </form>
+        )}
+
       </DialogContent>
     </Dialog>
   );
