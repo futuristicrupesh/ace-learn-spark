@@ -287,19 +287,14 @@ export function RatingPromptDialog({
   context: string;
 }) {
   const { user } = useAuth();
-  const [name, setName] = useState("");
+  const name = useDisplayName();
   const [message, setMessage] = useState("");
   const [rating, setRating] = useState(5);
   const { submit, busy } = useSubmitTestimonial();
 
-  useEffect(() => {
-    const meta = user?.user_metadata as { student_name?: string } | undefined;
-    if (user && !name) setName(meta?.student_name || user.email?.split("@")[0] || "");
-  }, [user, name]);
-
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const ok = await submit({ name, role: "", message, rating });
+    const ok = await submit({ role: "", message, rating });
     if (ok) onOpenChange(false);
   }
 
@@ -310,12 +305,16 @@ export function RatingPromptDialog({
           <DialogTitle>How was {context}?</DialogTitle>
           <DialogDescription>Rate AceCoach out of five and leave a testimonial — it shows on the homepage instantly.</DialogDescription>
         </DialogHeader>
+        {!user ? (
+          <SignInToRate />
+        ) : (
         <form onSubmit={onSubmit} className="grid gap-4">
           <RatingPicker rating={rating} setRating={setRating} />
           <div className="grid gap-1.5">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">Your name</Label>
-            <Input required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Aarav" />
+            <Input value={name} readOnly disabled className="bg-muted/50" />
           </div>
+
           <div className="grid gap-1.5">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">Your testimonial</Label>
             <Textarea required maxLength={1000} rows={3} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="What worked for you?" />
