@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Star, BadgeCheck, Users, MessageSquareQuote } from "lucide-react";
+
 
 export type Testimonial = {
   id: string;
@@ -145,19 +147,40 @@ function StatCard({ icon, value, label }: { icon: React.ReactNode; value: string
   );
 }
 
+/** The locked display name for the signed-in student. */
+export function useDisplayName() {
+  const { user } = useAuth();
+  if (!user) return "";
+  const meta = user.user_metadata as { student_name?: string; full_name?: string; name?: string } | undefined;
+  return meta?.student_name || meta?.full_name || meta?.name || user.email?.split("@")[0] || "Student";
+}
+
+function SignInToRate({ title = "Sign in to rate AceCoach" }: { title?: string }) {
+  return (
+    <div className="grid gap-3">
+      <p className="text-sm text-muted-foreground">
+        {title} — only signed-in students can post a rating, and your name comes from your account.
+      </p>
+      <Button asChild className="w-fit">
+        <Link to="/auth">Sign in</Link>
+      </Button>
+    </div>
+  );
+}
+
 function useSubmitTestimonial() {
   const { user } = useAuth();
+  const name = useDisplayName();
   const [busy, setBusy] = useState(false);
 
-  async function submit(values: { name: string; role: string; message: string; rating: number }) {
-    const cleanName = values.name.trim();
+  async function submit(values: { role: string; message: string; rating: number }) {
+    if (!user) { toast.error("Please sign in to post a rating."); return false; }
     const cleanMessage = values.message.trim();
-    if (!cleanName || cleanName.length > 80) { toast.error("Please enter your name (max 80 chars)."); return false; }
     if (!cleanMessage || cleanMessage.length > 1000) { toast.error("Message must be 1–1000 characters."); return false; }
     setBusy(true);
     const { error } = await supabase.from("testimonials").insert({
-      user_id: user?.id ?? null,
-      name: cleanName,
+      user_id: user.id,
+      name,
       role: values.role.trim() || null,
       message: cleanMessage,
       rating: values.rating,
@@ -170,6 +193,7 @@ function useSubmitTestimonial() {
 
   return { submit, busy };
 }
+
 
 function RatingPicker({ rating, setRating }: { rating: number; setRating: (n: number) => void }) {
   return (
@@ -185,7 +209,8 @@ function RatingPicker({ rating, setRating }: { rating: number; setRating: (n: nu
 }
 
 export function TestimonialForm({ onPosted }: { onPosted: () => void }) {
-  const [name, setName] = useState("");
+  const { user } = useAuth();
+  const name = useDisplayName();
   const [role, setRole] = useState("");
   const [message, setMessage] = useState("");
   const [rating, setRating] = useState(5);
@@ -193,20 +218,23 @@ export function TestimonialForm({ onPosted }: { onPosted: () => void }) {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const ok = await submit({ name, role, message, rating });
+    const ok = await submit({ role, message, rating });
     if (!ok) return;
-    setName(""); setRole(""); setMessage(""); setRating(5);
+    setRole(""); setMessage(""); setRating(5);
     onPosted();
   }
 
   return (
     <Card className="p-6">
       <h2 className="text-lg font-semibold">Share your experience</h2>
+      {!user ? (
+        <div className="mt-4"><SignInToRate /></div>
+      ) : (
       <form onSubmit={onSubmit} className="mt-4 grid gap-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">Your name</Label>
-            <Input required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
+            <Input value={name} readOnly disabled className="bg-muted/50" />
           </div>
           <div className="grid gap-1.5">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">Class / role (optional)</Label>
@@ -223,9 +251,11 @@ export function TestimonialForm({ onPosted }: { onPosted: () => void }) {
         </div>
         <Button type="submit" disabled={busy}>{busy ? "Posting…" : "Post testimonial"}</Button>
       </form>
+      )}
     </Card>
   );
 }
+
 
 /**
  * Asks the student to rate AceCoach right after they finish an AI task.
@@ -257,19 +287,14 @@ export function RatingPromptDialog({
   context: string;
 }) {
   const { user } = useAuth();
-  const [name, setName] = useState("");
+  const name = useDisplayName();
   const [message, setMessage] = useState("");
   const [rating, setRating] = useState(5);
   const { submit, busy } = useSubmitTestimonial();
 
-  useEffect(() => {
-    const meta = user?.user_metadata as { student_name?: string } | undefined;
-    if (user && !name) setName(meta?.student_name || user.email?.split("@")[0] || "");
-  }, [user, name]);
-
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const ok = await submit({ name, role: "", message, rating });
+    const ok = await submit({ role: "", message, rating });
     if (ok) onOpenChange(false);
   }
 
@@ -280,12 +305,16 @@ export function RatingPromptDialog({
           <DialogTitle>How was {context}?</DialogTitle>
           <DialogDescription>Rate AceCoach out of five and leave a testimonial — it shows on the homepage instantly.</DialogDescription>
         </DialogHeader>
+        {!user ? (
+          <SignInToRate />
+        ) : (
         <form onSubmit={onSubmit} className="grid gap-4">
           <RatingPicker rating={rating} setRating={setRating} />
           <div className="grid gap-1.5">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">Your name</Label>
-            <Input required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Aarav" />
+            <Input value={name} readOnly disabled className="bg-muted/50" />
           </div>
+
           <div className="grid gap-1.5">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">Your testimonial</Label>
             <Textarea required maxLength={1000} rows={3} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="What worked for you?" />
@@ -295,6 +324,8 @@ export function RatingPromptDialog({
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Later</Button>
           </div>
         </form>
+        )}
+
       </DialogContent>
     </Dialog>
   );
