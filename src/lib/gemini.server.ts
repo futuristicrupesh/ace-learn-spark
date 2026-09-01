@@ -198,6 +198,7 @@ export async function geminiJson<T>(opts: {
   prompt: string;
   schema: JsonSchema;
   temperature?: number;
+  maxOutputTokens?: number;
   signal?: AbortSignal;
 }): Promise<T> {
   const res = await geminiFetch({
@@ -209,7 +210,7 @@ export async function geminiJson<T>(opts: {
       contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
       generationConfig: {
         temperature: opts.temperature ?? 0.3,
-        maxOutputTokens: 8192,
+        maxOutputTokens: opts.maxOutputTokens ?? 16384,
         responseMimeType: "application/json",
         responseSchema: opts.schema,
       },
@@ -252,7 +253,7 @@ export async function geminiStreamText(opts: {
         role: m.role === "assistant" ? "model" : "user",
         parts: [{ text: m.content }],
       })),
-      generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
+      generationConfig: { temperature: 0.7, maxOutputTokens: 16384 },
     },
   });
 
