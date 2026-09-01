@@ -124,7 +124,7 @@ function HomeworkPage() {
                       <span className="text-xs font-mono text-muted-foreground">Q{i + 1}</span>
                       <Badge className={diffColor[q.difficulty] ?? ""}>{q.difficulty.replace("_", " ")}</Badge>
                     </div>
-                    <p className="font-medium leading-relaxed">{q.questionText}</p>
+                    <Markdown className="prose-ace font-medium leading-relaxed">{q.questionText}</Markdown>
                     <p className="text-xs text-muted-foreground mt-2"><span className="font-semibold">Full marks:</span> {q.gradingStandard}</p>
 
                     <Textarea
@@ -180,7 +180,7 @@ function HomeworkPage() {
                         <span>Card {i + 1}</span>
                         <RotateCw className="h-3 w-3" />
                       </div>
-                      <p className="font-medium leading-relaxed">{isFlipped ? c.back : c.front}</p>
+                      <Markdown className="prose-ace text-sm font-medium leading-relaxed">{isFlipped ? c.back : c.front}</Markdown>
                       <p className="mt-3 text-xs opacity-60">{isFlipped ? "Answer · tap to flip" : "Tap to reveal"}</p>
                     </Card>
                   </button>
