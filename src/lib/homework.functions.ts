@@ -69,7 +69,9 @@ Country: ${data.country}
 
 Rules:
 - Produce 4 homeworkQuestions with ids hw-1..hw-4: two HARD, two ACE_LEVEL. Each questionText must be exam-quality and fully self-contained. gradingStandard describes what a full-marks answer must include.
-- Produce 6 revisionCards. Fronts are prompts or questions; backs are complete, precise answers.
+- Produce 10 revisionCards covering the WHOLE chapter — every definition, formula, exception, and exam trap. Fronts are prompts or questions; backs are complete, precise, fully explained answers written in warm human prose.
+- Nothing about the chapter may be left uncovered: spread the questions and cards across every sub-topic.
+- Write every formula as real LaTeX: inline as $v = u + at$, displayed as $$ ... $$ on its own lines, and define each symbol in words. Never use code fences or computer-style syntax for maths.
 - Use a fresh unique missionId.`;
 
     let raw: unknown;
@@ -79,6 +81,7 @@ Rules:
         prompt,
         schema: missionSchema,
         temperature: 0.3,
+        maxOutputTokens: 32768,
       });
     } catch {
       raw = {
@@ -169,6 +172,8 @@ Rules:
 - scorePercentage: integer 0-100.
 - aceVerdict: ACE_APPROVED (>=85 and no critical gaps), MASTERS_REVIEW (60-84 or small errors), RE_LEARN_REQUIRED (<60 or fundamental misconceptions).
 - detailedFeedbackMarkdown: what was right, what was wrong, the correct approach, and a targeted next step. Use markdown.
+- detailedFeedbackMarkdown must be generous and complete: praise what worked, name every gap, give the full model answer with reasoning, and add exam tips for this topic. Write in warm human prose, never clipped notes.
+- Write every formula as real LaTeX: inline as $F = ma$, displayed as $$ ... $$ on its own lines, defining each symbol in words. Never use code fences or computer-style syntax for maths.
 - parentAlertSnippet: one plain-English sentence a parent can read.`;
 
     let raw: unknown;
@@ -178,6 +183,7 @@ Rules:
         prompt,
         schema: gradeSchema,
         temperature: 0.2,
+        maxOutputTokens: 16384,
       });
     } catch {
       const answerWords = new Set(data.answer.toLowerCase().match(/[a-z]{4,}/g) ?? []);
