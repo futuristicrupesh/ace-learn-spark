@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { Markdown } from "@/components/markdown";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -124,7 +124,7 @@ function HomeworkPage() {
                       <span className="text-xs font-mono text-muted-foreground">Q{i + 1}</span>
                       <Badge className={diffColor[q.difficulty] ?? ""}>{q.difficulty.replace("_", " ")}</Badge>
                     </div>
-                    <p className="font-medium leading-relaxed">{q.questionText}</p>
+                    <Markdown className="prose-ace font-medium leading-relaxed">{q.questionText}</Markdown>
                     <p className="text-xs text-muted-foreground mt-2"><span className="font-semibold">Full marks:</span> {q.gradingStandard}</p>
 
                     <Textarea
@@ -152,9 +152,7 @@ function HomeworkPage() {
                           <span className="text-sm font-mono">{g.scorePercentage}%</span>
                           <Progress value={g.scorePercentage} className="flex-1 max-w-xs" />
                         </div>
-                        <div className="prose-ace text-sm mt-4">
-                          <ReactMarkdown>{g.detailedFeedbackMarkdown}</ReactMarkdown>
-                        </div>
+                        <Markdown className="prose-ace text-sm mt-4">{g.detailedFeedbackMarkdown}</Markdown>
                         <p className="text-xs mt-4 text-muted-foreground italic">
                           <span className="font-semibold not-italic">Parent alert:</span> {g.parentAlertSnippet}
                         </p>
@@ -182,7 +180,7 @@ function HomeworkPage() {
                         <span>Card {i + 1}</span>
                         <RotateCw className="h-3 w-3" />
                       </div>
-                      <p className="font-medium leading-relaxed">{isFlipped ? c.back : c.front}</p>
+                      <Markdown className="prose-ace text-sm font-medium leading-relaxed">{isFlipped ? c.back : c.front}</Markdown>
                       <p className="mt-3 text-xs opacity-60">{isFlipped ? "Answer · tap to flip" : "Tap to reveal"}</p>
                     </Card>
                   </button>
