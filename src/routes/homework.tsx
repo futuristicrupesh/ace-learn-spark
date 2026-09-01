@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { Markdown } from "@/components/markdown";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -152,9 +152,7 @@ function HomeworkPage() {
                           <span className="text-sm font-mono">{g.scorePercentage}%</span>
                           <Progress value={g.scorePercentage} className="flex-1 max-w-xs" />
                         </div>
-                        <div className="prose-ace text-sm mt-4">
-                          <ReactMarkdown>{g.detailedFeedbackMarkdown}</ReactMarkdown>
-                        </div>
+                        <Markdown className="prose-ace text-sm mt-4">{g.detailedFeedbackMarkdown}</Markdown>
                         <p className="text-xs mt-4 text-muted-foreground italic">
                           <span className="font-semibold not-italic">Parent alert:</span> {g.parentAlertSnippet}
                         </p>

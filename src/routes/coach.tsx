@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { Markdown } from "@/components/markdown";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -140,9 +140,7 @@ function MessageBubble({ msg, streaming }: { msg: Msg; streaming: boolean }) {
         {isUser ? (
           <p className="whitespace-pre-wrap">{msg.content}</p>
         ) : (
-          <div className="prose-ace text-sm">
-            <ReactMarkdown>{msg.content || (streaming ? "…" : "")}</ReactMarkdown>
-          </div>
+          <Markdown className="prose-ace text-sm">{msg.content || (streaming ? "…" : "")}</Markdown>
         )}
       </div>
     </div>

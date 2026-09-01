@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { Markdown } from "@/components/markdown";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -123,9 +123,7 @@ function LecturePart({ part, index }: { part: Lecture["parts"][number]; index: n
         <AudioPlayer text={part.audioSpeakerPrompt} key={index} />
       </div>
 
-      <div className="prose-ace mt-6">
-        <ReactMarkdown>{part.writtenTranscriptMarkdown}</ReactMarkdown>
-      </div>
+      <Markdown className="prose-ace mt-6">{part.writtenTranscriptMarkdown}</Markdown>
 
       <div className="mt-8 rounded-lg border border-accent/30 bg-accent/5 p-5">
         <p className="text-xs uppercase tracking-wide text-accent-foreground/70 font-semibold">Aced Checkpoints</p>
