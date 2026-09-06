@@ -211,6 +211,10 @@ export async function geminiJson<T>(opts: {
       generationConfig: {
         temperature: opts.temperature ?? 0.3,
         maxOutputTokens: opts.maxOutputTokens ?? 16384,
+        // Without this the 2.5 "thinking" models spend the entire output budget on
+        // internal reasoning and return an EMPTY answer, which is what silently
+        // pushed every lecture/homework onto the generic fallback text.
+        thinkingConfig: { thinkingBudget: 0 },
         responseMimeType: "application/json",
         responseSchema: opts.schema,
       },
@@ -221,18 +225,65 @@ export async function geminiJson<T>(opts: {
   if (!res.ok) throw friendlyError(res.status, await res.text().catch(() => ""));
 
   const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
   };
   const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-  if (!text.trim()) throw new GeminiError("The AI returned an empty response. Try again.", 502);
+  if (!text.trim()) {
+    throw new GeminiError(
+      `The AI returned an empty response (${data.candidates?.[0]?.finishReason ?? "unknown"}).`,
+      502,
+    );
+  }
   try {
     return JSON.parse(text) as T;
   } catch {
     const match = text.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]) as T;
+    if (match) {
+      try {
+        return JSON.parse(match[0]) as T;
+      } catch {
+        /* fall through to salvage below */
+      }
+    }
+    // A truncated JSON object still holds most of the lecture — repair it rather
+    // than throwing the whole generation away.
+    const salvaged = repairJson(text);
+    if (salvaged) return salvaged as T;
     throw new GeminiError("The AI response couldn't be parsed. Try again.", 502);
   }
 }
+
+/** Best-effort repair of JSON that was cut off mid-string / mid-object. */
+function repairJson(text: string): unknown {
+  const start = text.indexOf("{");
+  if (start < 0) return null;
+  let s = text.slice(start);
+  // close an unterminated string
+  const quotes = (s.match(/(?<!\\)"/g) ?? []).length;
+  if (quotes % 2 === 1) s += '"';
+  // close any open brackets
+  const stack: string[] = [];
+  let inStr = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (c === "\\") i += 1;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === "{" || c === "[") stack.push(c);
+    else if (c === "}" || c === "]") stack.pop();
+  }
+  s = s.replace(/,\s*$/, "");
+  while (stack.length) s += stack.pop() === "{" ? "}" : "]";
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
+
 
 /** Streams plain text deltas as a Response body. */
 export async function geminiStreamText(opts: {
