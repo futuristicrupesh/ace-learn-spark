@@ -304,7 +304,11 @@ export async function geminiStreamText(opts: {
         role: m.role === "assistant" ? "model" : "user",
         parts: [{ text: m.content }],
       })),
-      generationConfig: { temperature: 0.7, maxOutputTokens: 16384 },
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 16384,
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     },
   });
 
