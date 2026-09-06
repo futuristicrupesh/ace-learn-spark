@@ -103,11 +103,16 @@ Student:
 Write PART ${index + 1} of 4, titled "${title}".
 Scope of this part: ${PART_BRIEFS[title]}
 
+Textbook-completeness requirement (most important):
+- Treat the prescribed ${data.educationBoard} textbook chapter on "${data.topic}" as the minimum syllabus. Walk through it section by section in the textbook's own order and teach EVERY heading, sub-heading, definition, law, derivation, diagram/figure explained in words, table, unit, special case, in-text example and end-of-chapter exercise type that belongs to this part. Nothing from the book may be skipped or merely mentioned by name.
+- Where the textbook states something briefly, expand it into a full explanation with reasoning; where it gives an example, work a comparable example fully.
+- Explicitly name the textbook sub-topics you are covering as markdown headings so the student can tick them off.
+
 Depth requirements:
-- writtenTranscriptMarkdown must be extremely thorough: at least 1200 words for this part, covering every sub-topic, corner case, exception and exam tip that belongs here. Do not summarise — teach completely.
-- Include worked examples with full step-by-step solutions and the reasoning behind each step.
-- Include a short "Common mistakes and how to avoid them" section and an "Exam tips" section.
-- readingTimeMinutes: honest estimate (usually 10-18).
+- writtenTranscriptMarkdown must be extremely thorough: at least 1800 words for this part. Do not summarise — teach completely.
+- Include several worked examples with full step-by-step solutions and the reasoning behind each step.
+- Include a "Common mistakes and how to avoid them" section and an "Exam tips" section.
+- readingTimeMinutes: honest estimate (usually 12-25).
 - audioSpeakerPrompt: a 130-170 word spoken narration script (plain natural speech, no markdown, no symbols, spell out formulas in words).
 - acedCheckpoints: 3-5 crisp mastery checks for this part.
 
@@ -123,12 +128,48 @@ ${FORMAT_RULES}`;
           });
           const parsed = LecturePartSchema.safeParse(raw);
           if (parsed.success && parsed.data.writtenTranscriptMarkdown.trim().length > 200) {
-            return { ...parsed.data, segmentTitle: parsed.data.segmentTitle || title };
+            let transcript = parsed.data.writtenTranscriptMarkdown;
+
+            // If the model came back thin, run one expansion pass so the part still
+            // covers the whole textbook section instead of a summary.
+            if (transcript.length < 5000) {
+              try {
+                const extra = await geminiJson<{ continuationMarkdown?: string }>({
+                  apiKey,
+                  prompt: `You already wrote this lecture part for ${data.className} (${data.educationBoard}, ${data.country}) on "${data.topic}", part "${title}":
+
+"""${transcript}"""
+
+It is incomplete compared with the prescribed textbook chapter. Write the MISSING material only — the sub-topics, definitions, derivations, worked examples, special cases, diagrams-in-words, tables and exercise types from the book that are absent above. At least 900 words, continuing seamlessly in the same voice, no repetition of what is already written.
+
+${FORMAT_RULES}`,
+                  schema: {
+                    type: "OBJECT",
+                    properties: { continuationMarkdown: { type: "STRING" } },
+                    required: ["continuationMarkdown"],
+                  },
+                  temperature: 0.35,
+                  maxOutputTokens: 32768,
+                });
+                if (extra?.continuationMarkdown && extra.continuationMarkdown.trim().length > 300) {
+                  transcript = `${transcript}\n\n${extra.continuationMarkdown.trim()}`;
+                }
+              } catch {
+                /* the first pass is still good content */
+              }
+            }
+
+            return {
+              ...parsed.data,
+              writtenTranscriptMarkdown: transcript,
+              segmentTitle: parsed.data.segmentTitle || title,
+            };
           }
         } catch {
           /* fall through to reliable content */
         }
         return fallbackPart(title, index, data.topic);
+
       }),
     );
 
