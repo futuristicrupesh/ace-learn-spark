@@ -199,8 +199,9 @@ export async function geminiFetch(opts: {
 
 
       if (!last) continue;
-      const body = await last.clone().text().catch(() => "");
-      if (isModelUnavailable(last.status, body) || isTransientFailure(last.status, body)) break;
+      const errBody = await last.clone().text().catch(() => "");
+      if (isModelUnavailable(last.status, errBody) || isTransientFailure(last.status, errBody)) break;
+
       if (![400, 401, 403].includes(last.status)) break;
     }
   }
