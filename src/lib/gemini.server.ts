@@ -148,6 +148,16 @@ export async function geminiFetch(opts: {
   const modes = isOAuthToken(key) ? [true, false] : [false, true];
   const models = Array.isArray(opts.model) ? opts.model : [opts.model];
   let last: Response | null = null;
+  // Older models reject `thinkingConfig`; if that happens we drop it and retry.
+  let body = opts.body;
+  let strippedThinking = false;
+  const stripThinking = (input: unknown): unknown => {
+    const clone = JSON.parse(JSON.stringify(input)) as {
+      generationConfig?: Record<string, unknown>;
+    };
+    if (clone.generationConfig) delete clone.generationConfig["thinkingConfig"];
+    return clone;
+  };
   for (const model of models) {
     for (const asBearer of modes) {
       for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -157,7 +167,7 @@ export async function geminiFetch(opts: {
             method: "POST",
             headers: headersFor(key, asBearer),
             signal: opts.signal,
-            body: JSON.stringify(opts.body),
+            body: JSON.stringify(body),
           });
         } catch (error) {
           if (opts.signal?.aborted) throw error;
@@ -170,6 +180,12 @@ export async function geminiFetch(opts: {
         }
         if (res.ok) return res;
         const text = await res.text().catch(() => "");
+        if (res.status === 400 && !strippedThinking && /thinking/i.test(text)) {
+          strippedThinking = true;
+          body = stripThinking(body);
+          attempt -= 1;
+          continue;
+        }
         last = new Response(text, {
           status: res.status,
           headers: { "retry-after": res.headers.get("retry-after") ?? "" },
@@ -181,9 +197,11 @@ export async function geminiFetch(opts: {
         break;
       }
 
+
       if (!last) continue;
-      const body = await last.clone().text().catch(() => "");
-      if (isModelUnavailable(last.status, body) || isTransientFailure(last.status, body)) break;
+      const errBody = await last.clone().text().catch(() => "");
+      if (isModelUnavailable(last.status, errBody) || isTransientFailure(last.status, errBody)) break;
+
       if (![400, 401, 403].includes(last.status)) break;
     }
   }
@@ -211,6 +229,10 @@ export async function geminiJson<T>(opts: {
       generationConfig: {
         temperature: opts.temperature ?? 0.3,
         maxOutputTokens: opts.maxOutputTokens ?? 16384,
+        // Without this the 2.5 "thinking" models spend the entire output budget on
+        // internal reasoning and return an EMPTY answer, which is what silently
+        // pushed every lecture/homework onto the generic fallback text.
+        thinkingConfig: { thinkingBudget: 0 },
         responseMimeType: "application/json",
         responseSchema: opts.schema,
       },
@@ -221,18 +243,65 @@ export async function geminiJson<T>(opts: {
   if (!res.ok) throw friendlyError(res.status, await res.text().catch(() => ""));
 
   const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
   };
   const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-  if (!text.trim()) throw new GeminiError("The AI returned an empty response. Try again.", 502);
+  if (!text.trim()) {
+    throw new GeminiError(
+      `The AI returned an empty response (${data.candidates?.[0]?.finishReason ?? "unknown"}).`,
+      502,
+    );
+  }
   try {
     return JSON.parse(text) as T;
   } catch {
     const match = text.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]) as T;
+    if (match) {
+      try {
+        return JSON.parse(match[0]) as T;
+      } catch {
+        /* fall through to salvage below */
+      }
+    }
+    // A truncated JSON object still holds most of the lecture — repair it rather
+    // than throwing the whole generation away.
+    const salvaged = repairJson(text);
+    if (salvaged) return salvaged as T;
     throw new GeminiError("The AI response couldn't be parsed. Try again.", 502);
   }
 }
+
+/** Best-effort repair of JSON that was cut off mid-string / mid-object. */
+function repairJson(text: string): unknown {
+  const start = text.indexOf("{");
+  if (start < 0) return null;
+  let s = text.slice(start);
+  // close an unterminated string
+  const quotes = (s.match(/(?<!\\)"/g) ?? []).length;
+  if (quotes % 2 === 1) s += '"';
+  // close any open brackets
+  const stack: string[] = [];
+  let inStr = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (c === "\\") i += 1;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === "{" || c === "[") stack.push(c);
+    else if (c === "}" || c === "]") stack.pop();
+  }
+  s = s.replace(/,\s*$/, "");
+  while (stack.length) s += stack.pop() === "{" ? "}" : "]";
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
+
 
 /** Streams plain text deltas as a Response body. */
 export async function geminiStreamText(opts: {
@@ -253,7 +322,11 @@ export async function geminiStreamText(opts: {
         role: m.role === "assistant" ? "model" : "user",
         parts: [{ text: m.content }],
       })),
-      generationConfig: { temperature: 0.7, maxOutputTokens: 16384 },
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 16384,
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     },
   });
 
