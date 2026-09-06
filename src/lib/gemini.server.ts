@@ -148,6 +148,16 @@ export async function geminiFetch(opts: {
   const modes = isOAuthToken(key) ? [true, false] : [false, true];
   const models = Array.isArray(opts.model) ? opts.model : [opts.model];
   let last: Response | null = null;
+  // Older models reject `thinkingConfig`; if that happens we drop it and retry.
+  let body = opts.body;
+  let strippedThinking = false;
+  const stripThinking = (input: unknown): unknown => {
+    const clone = JSON.parse(JSON.stringify(input)) as {
+      generationConfig?: Record<string, unknown>;
+    };
+    if (clone.generationConfig) delete clone.generationConfig["thinkingConfig"];
+    return clone;
+  };
   for (const model of models) {
     for (const asBearer of modes) {
       for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -157,7 +167,7 @@ export async function geminiFetch(opts: {
             method: "POST",
             headers: headersFor(key, asBearer),
             signal: opts.signal,
-            body: JSON.stringify(opts.body),
+            body: JSON.stringify(body),
           });
         } catch (error) {
           if (opts.signal?.aborted) throw error;
@@ -170,6 +180,12 @@ export async function geminiFetch(opts: {
         }
         if (res.ok) return res;
         const text = await res.text().catch(() => "");
+        if (res.status === 400 && !strippedThinking && /thinking/i.test(text)) {
+          strippedThinking = true;
+          body = stripThinking(body);
+          attempt -= 1;
+          continue;
+        }
         last = new Response(text, {
           status: res.status,
           headers: { "retry-after": res.headers.get("retry-after") ?? "" },
@@ -180,6 +196,7 @@ export async function geminiFetch(opts: {
         }
         break;
       }
+
 
       if (!last) continue;
       const body = await last.clone().text().catch(() => "");
