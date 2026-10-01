@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Markdown } from "@/components/markdown";
 import { toast } from "sonner";
@@ -8,43 +7,99 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { loadProfile } from "@/lib/profile";
-import { generateLecture, type Lecture } from "@/lib/lectures.functions";
+import { generateLecturePart, LECTURE_TITLES, type LecturePart } from "@/lib/lectures.functions";
 import { RatingPromptDialog, useRatingPrompt } from "@/components/testimonials";
 import { ApiKeyGate } from "@/components/api-key-gate";
 import { useApiKey, loadApiKey } from "@/lib/user-api-key";
-import { Play, Pause, Loader2, CheckCircle2 } from "lucide-react";
+import { Play, Pause, Loader2, CheckCircle2, RotateCw } from "lucide-react";
 
 export const Route = createFileRoute("/lecture")({
+  head: () => ({
+    meta: [
+      { title: "Lecture Studio — AceCoach" },
+      { name: "description", content: "Full-chapter lectures with real definitions, proofs, worked examples and narration." },
+      { property: "og:title", content: "Lecture Studio — AceCoach" },
+      { property: "og:description", content: "Full-chapter lectures with real definitions, proofs, worked examples and narration." },
+    ],
+  }),
   component: LecturePage,
 });
 
+type Slot =
+  | { status: "writing"; attempt: number }
+  | { status: "ready"; part: LecturePart }
+  | { status: "failed"; message: string };
+
+const MAX_ATTEMPTS = 5;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 function LecturePage() {
   const [topic, setTopic] = useState("");
-  const [lecture, setLecture] = useState<Lecture | null>(null);
+  const [shownTopic, setShownTopic] = useState("");
+  const [slots, setSlots] = useState<Slot[] | null>(null);
   const [active, setActive] = useState(0);
+  const runId = useRef(0);
   const prompt = useRatingPrompt();
   const { apiKey } = useApiKey();
 
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const profile = loadProfile();
-      return generateLecture({
-        data: {
-          apiKey,
-          topic,
-          className: profile?.className ?? "10th Grade",
-          country: profile?.country ?? "USA",
-          educationBoard: profile?.educationBoard ?? "Standard Board",
-        },
-      });
-    },
-    onSuccess: (data) => {
-      setLecture(data);
-      setActive(0);
+  const setSlot = (run: number, i: number, slot: Slot) => {
+    if (run !== runId.current) return;
+    setSlots((prev) => (prev ? prev.map((s, j) => (j === i ? slot : s)) : prev));
+  };
+
+  async function writePart(run: number, i: number, subject: string): Promise<boolean> {
+    const profile = loadProfile();
+    let lastMessage = "";
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      if (run !== runId.current) return false;
+      setSlot(run, i, { status: "writing", attempt });
+      try {
+        const part = await generateLecturePart({
+          data: {
+            apiKey: apiKey || loadApiKey(),
+            topic: subject,
+            partIndex: i,
+            className: profile?.className ?? "10th Grade",
+            country: profile?.country ?? "USA",
+            educationBoard: profile?.educationBoard ?? "Standard Board",
+          },
+        });
+        setSlot(run, i, { status: "ready", part });
+        return true;
+      } catch (e) {
+        lastMessage = e instanceof Error ? e.message : String(e);
+        // Invalid key won't fix itself by waiting.
+        if (/isn't valid|No Google AI key/i.test(lastMessage)) break;
+        await sleep(Math.min(4000 * attempt, 20000));
+      }
+    }
+    setSlot(run, i, { status: "failed", message: lastMessage });
+    return false;
+  }
+
+  async function start() {
+    const subject = topic.trim();
+    if (!subject) return;
+    const run = ++runId.current;
+    setShownTopic(subject);
+    setActive(0);
+    setSlots(LECTURE_TITLES.map(() => ({ status: "writing", attempt: 1 }) as Slot));
+    // Part 1 first so the student can start reading, then the rest (staggered to
+    // stay within free-key rate limits).
+    const first = writePart(run, 0, subject);
+    await sleep(2500);
+    const rest = [1, 2, 3].map(async (i, k) => {
+      await sleep(k * 2500);
+      return writePart(run, i, subject);
+    });
+    const results = await Promise.all([first, ...rest]);
+    if (run === runId.current && results.some(Boolean)) {
       setTimeout(() => prompt.ask("your lecture"), 1200);
-    },
-    onError: (e: Error) => toast.error(e.message || "Failed to generate lecture"),
-  });
+    }
+  }
+
+  const busy = !!slots?.some((s) => s.status === "writing");
+  const current = slots?.[active];
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
@@ -56,37 +111,32 @@ function LecturePage() {
 
       <ApiKeyGate>
       <form
-        onSubmit={(e) => { e.preventDefault(); if (topic.trim()) mutation.mutate(); }}
+        onSubmit={(e) => { e.preventDefault(); void start(); }}
         className="flex flex-col sm:flex-row gap-3 mb-8"
       >
         <Input
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
-          placeholder="e.g. Photosynthesis, Quadratic Equations, French Revolution"
+          placeholder="e.g. Triangles, Photosynthesis, French Revolution"
           className="h-11"
         />
-        <Button type="submit" disabled={mutation.isPending || !topic.trim()} className="h-11 px-6">
-          {mutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating…</> : "Generate Lecture"}
+        <Button type="submit" disabled={busy || !topic.trim()} className="h-11 px-6">
+          {busy ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Writing…</> : "Generate Lecture"}
         </Button>
       </form>
 
-      {mutation.isPending && (
-        <Card className="p-10 text-center text-muted-foreground">
-          <Loader2 className="h-6 w-6 animate-spin mx-auto mb-3" />
-          AceCoach is drafting a rigorous 4-part lecture…
-        </Card>
-      )}
-
-      {lecture && (
+      {slots && (
         <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
           <aside className="lg:sticky lg:top-20 h-fit space-y-2">
             <div className="rounded-lg bg-primary/5 border border-primary/10 p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Topic</p>
-              <p className="mt-1 font-semibold">{lecture.topic}</p>
-              <p className="mt-3 text-sm text-primary italic font-serif">{lecture.academicRigorHeader}</p>
+              <p className="mt-1 font-semibold">{shownTopic}</p>
+              <p className="mt-3 text-sm text-primary italic font-serif">
+                Every definition, theorem, proof and worked example of {shownTopic}.
+              </p>
             </div>
             <div className="space-y-1">
-              {lecture.parts.map((p, i) => (
+              {slots.map((s, i) => (
                 <button
                   key={i}
                   onClick={() => setActive(i)}
@@ -94,14 +144,39 @@ function LecturePage() {
                     i === active ? "bg-primary text-primary-foreground" : "hover:bg-muted"
                   }`}
                 >
-                  <span className="text-xs opacity-70">Part {i + 1}</span>
-                  <div className="font-medium">{p.segmentTitle}</div>
+                  <span className="text-xs opacity-70 flex items-center gap-1.5">
+                    Part {i + 1}
+                    {s.status === "writing" && <Loader2 className="h-3 w-3 animate-spin" />}
+                    {s.status === "ready" && <CheckCircle2 className="h-3 w-3" />}
+                  </span>
+                  <div className="font-medium">{LECTURE_TITLES[i]}</div>
                 </button>
               ))}
             </div>
           </aside>
 
-          <LecturePart part={lecture.parts[active]} index={active} />
+          {current?.status === "ready" ? (
+            <LecturePartView part={current.part} index={active} />
+          ) : current?.status === "failed" ? (
+            <Card className="p-10 text-center">
+              <p className="font-medium">This part is taking longer than usual.</p>
+              <p className="mt-2 text-sm text-muted-foreground">{current.message}</p>
+              <Button
+                className="mt-5 gap-2"
+                onClick={() => void writePart(runId.current, active, shownTopic)}
+              >
+                <RotateCw className="h-4 w-4" /> Write this part again
+              </Button>
+            </Card>
+          ) : (
+            <Card className="p-10 text-center text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin mx-auto mb-3" />
+              AceCoach is writing Part {active + 1}: {LECTURE_TITLES[active]} — the full chapter content, with proofs and solved examples.
+              {current?.status === "writing" && current.attempt > 1 && (
+                <p className="mt-2 text-xs">The AI is busy right now, still working on it…</p>
+              )}
+            </Card>
+          )}
         </div>
       )}
 
@@ -112,7 +187,7 @@ function LecturePage() {
   );
 }
 
-function LecturePart({ part, index }: { part: Lecture["parts"][number]; index: number }) {
+function LecturePartView({ part, index }: { part: LecturePart; index: number }) {
   return (
     <Card className="p-8">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -139,6 +214,7 @@ function LecturePart({ part, index }: { part: Lecture["parts"][number]; index: n
     </Card>
   );
 }
+
 
 function AudioPlayer({ text }: { text: string }) {
   const [status, setStatus] = useState<"idle" | "loading" | "playing" | "paused">("idle");
