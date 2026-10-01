@@ -271,6 +271,45 @@ export async function geminiJson<T>(opts: {
   }
 }
 
+/** Plain-text (markdown) generation. Far more robust than JSON for long teaching
+ *  content: nothing to parse, and an answer that hits the length limit is still usable. */
+export async function geminiText(opts: {
+  apiKey: string;
+  prompt: string;
+  system?: string;
+  temperature?: number;
+  maxOutputTokens?: number;
+  signal?: AbortSignal;
+}): Promise<{ text: string; finishReason: string }> {
+  const res = await geminiFetch({
+    model: TEXT_MODELS,
+    method: "generateContent",
+    apiKey: opts.apiKey,
+    signal: opts.signal,
+    body: {
+      ...(opts.system ? { systemInstruction: { parts: [{ text: opts.system }] } } : {}),
+      contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
+      generationConfig: {
+        temperature: opts.temperature ?? 0.4,
+        maxOutputTokens: opts.maxOutputTokens ?? 32768,
+        thinkingConfig: { thinkingBudget: 0 },
+      },
+    },
+  });
+  if (!res.ok) throw friendlyError(res.status, await res.text().catch(() => ""));
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
+  };
+  const cand = data.candidates?.[0];
+  const text =
+    cand?.content?.parts?.filter((p) => !p.thought).map((p) => p.text ?? "").join("") ?? "";
+  if (!text.trim()) {
+    throw new GeminiError(`The AI returned an empty response (${cand?.finishReason ?? "unknown"}).`, 502);
+  }
+  return { text: text.replace(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```\s*$/i, "$1"), finishReason: cand?.finishReason ?? "" };
+}
+
+
 /** Best-effort repair of JSON that was cut off mid-string / mid-object. */
 function repairJson(text: string): unknown {
   const start = text.indexOf("{");
