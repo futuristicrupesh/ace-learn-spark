@@ -9,13 +9,22 @@ const LecturePartSchema = z.object({
   acedCheckpoints: z.array(z.string()),
 });
 
-const LectureSchema = z.object({
-  topic: z.string(),
-  academicRigorHeader: z.string(),
-  parts: z.array(LecturePartSchema),
-});
+export type LecturePart = z.infer<typeof LecturePartSchema>;
+export type Lecture = { topic: string; academicRigorHeader: string; parts: LecturePart[] };
 
-export type Lecture = z.infer<typeof LectureSchema>;
+export const LECTURE_TITLES = [
+  "Concept Foundations",
+  "Rigorous Breakdown",
+  "Under-the-Hood Secret",
+  "Ultimate Synthesis",
+] as const;
+
+const PART_BRIEFS: string[] = [
+  "Start of the chapter: the motivation, every definition stated exactly (and explained intuitively), all key terms, notation, classifications/types with concrete examples of each, and the first results of the chapter, actually stated and explained.",
+  "The core of the chapter: every theorem, law, rule and formula, each stated precisely and then proved/derived line by line, with the conditions where it applies, followed by at least four fully solved numerical/written examples of increasing difficulty using real numbers.",
+  "The remaining and harder material of the chapter: converse results, special cases, exceptions, alternative proofs, why the results are true, common misconceptions (with the correct version), examiner traps, and fully solved tricky problems.",
+  "The end of the chapter and its applications: real-world uses, links to other chapters, a complete formula/result sheet written out in full, and a solved question bank (easy, board-level, challenge) with complete model answers.",
+];
 
 const InputSchema = z.object({
   apiKey: z.string().min(10),
@@ -23,159 +32,115 @@ const InputSchema = z.object({
   className: z.string().default("10th Grade"),
   country: z.string().default("USA"),
   educationBoard: z.string().default("Standard Board"),
+  partIndex: z.number().int().min(0).max(3),
 });
 
-const partSchema = {
-  type: "OBJECT",
-  properties: {
-    segmentTitle: { type: "STRING" },
-    readingTimeMinutes: { type: "NUMBER" },
-    audioSpeakerPrompt: { type: "STRING" },
-    writtenTranscriptMarkdown: { type: "STRING" },
-    acedCheckpoints: { type: "ARRAY", items: { type: "STRING" } },
-  },
-  required: [
-    "segmentTitle",
-    "readingTimeMinutes",
-    "audioSpeakerPrompt",
-    "writtenTranscriptMarkdown",
-    "acedCheckpoints",
-  ],
-};
+const SYSTEM = `You are AceCoach, a world-class subject teacher AND the textbook itself. The student has no book and no other source — everything they learn must be on this page.
 
-const TITLES = [
-  "Concept Foundations",
-  "Rigorous Breakdown",
-  "Under-the-Hood Secret",
-  "Ultimate Synthesis",
-] as const;
+Absolute rules:
+- Teach the ACTUAL subject matter. State the real definitions, the real theorems by name, the real formulas, the real proofs, the real facts, dates, examples and numbers.
+- NEVER give study advice in place of content. Forbidden: "write the definition", "list the key points", "refer to your textbook", "look up", "find the keyword", "identify the formula", "practise examples from your book", or any instruction that tells the student to go and get the content themselves. If you catch yourself describing what the student should learn, instead teach it.
+- Be specific, never generic. Example: for "Triangles" you would actually state and prove the Basic Proportionality Theorem (Thales) and its converse, state the AAA, AA, SSS and SAS similarity criteria with proofs/justification, prove that the ratio of areas of similar triangles equals the square of the ratio of corresponding sides, prove the Pythagoras theorem and its converse using similarity, and solve concrete problems with actual side lengths. Apply the same level of specificity to any subject (history: actual events, people, dates, causes and consequences; biology: actual structures, processes, equations and names; languages: actual rules with real sentences).
+- Write in flowing, warm teacher prose with clear markdown structure: ### headings for every sub-topic, numbered steps, tables where useful, **bold** key terms.
+- All mathematics in LaTeX: inline $...$ and display $$...$$ on their own lines. Never put formulas in code blocks. Define every symbol in words after each formula.
+- Output only the lesson in markdown. No preamble like "Sure" or "Here is".`;
 
-const PART_BRIEFS: Record<(typeof TITLES)[number], string> = {
-  "Concept Foundations":
-    "Every prerequisite, every definition (formal and intuitive), the origin/why of the topic, all key terms with precise meanings, notation conventions, units, classifications and the complete map of what the chapter contains.",
-  "Rigorous Breakdown":
-    "Every law, theorem, rule, derivation and formula of the chapter, each derived step by step from first principles, with the conditions where it applies and where it fails, plus at least four fully worked examples of increasing difficulty.",
-  "Under-the-Hood Secret":
-    "Deep insight: why the results are true, alternative proofs or viewpoints, edge cases, exceptions, the most common examiner traps, misconceptions with corrections, sign/unit pitfalls, approximations and their validity, plus expert shortcuts and how to recognise question types instantly.",
-  "Ultimate Synthesis":
-    "Full integration: connections to other chapters and real applications, a complete formula sheet, a graded question bank (easy → board-level → olympiad/AP-level) with model answers and mark schemes, a revision plan, and a final mastery audit.",
-};
+function buildPrompt(d: z.infer<typeof InputSchema>) {
+  const title = LECTURE_TITLES[d.partIndex];
+  return `Student: ${d.className}, ${d.country}, curriculum/board: ${d.educationBoard}.
+Chapter: "${d.topic}"
 
-const FORMAT_RULES = `Formatting rules (critical):
-- Write like a brilliant human teacher, in flowing, warm, explanatory prose — never terse notes, never robotic phrasing.
-- Every mathematical expression MUST be real LaTeX: inline as $E = mc^2$ and displayed as $$ ... $$ on its own lines. Never write formulas inside code fences or as programming syntax, and never leave stray braces, backslashes or markup visible to the reader.
-- Define every symbol in words immediately after each formula ("here $v$ is the speed in metres per second…").
-- Use markdown headings (###), numbered steps, tables where useful, and bold for key ideas.
-- Never say "as discussed above" without actually explaining; assume the reader has only this text.`;
+Write PART ${d.partIndex + 1} of 4 of a complete lesson on this chapter, titled "${title}".
+This part covers: ${PART_BRIEFS[d.partIndex]}
 
-function fallbackPart(title: string, index: number, topic: string) {
-  return {
-    segmentTitle: title,
-    readingTimeMinutes: 12,
-    audioSpeakerPrompt: `Welcome to part ${index + 1} of ${topic}. Begin by stating the central idea in your own words. Connect it to one fact you already know, then work through a simple example. Pause after each step and explain why it follows. For exam success, identify the command word, show the complete method, use precise vocabulary, and check that your conclusion answers the question. If a formula applies, define every symbol before substitution and verify the units. Finish by creating one example of your own and teaching the method aloud. That final explanation is the best test of whether you truly understand ${topic}.`,
-    writtenTranscriptMarkdown: `## ${title}\n\n### Core method\n\n1. **Define the idea:** Write a precise, board-appropriate definition of **${topic}**.\n2. **Identify what is given:** List facts, values, keywords, or evidence.\n3. **Choose the rule:** State the concept, formula, or reasoning principle before using it.\n4. **Apply it visibly:** Show one logical step per line and explain why it follows.\n5. **Verify:** Check terminology, units, signs, assumptions, and whether the conclusion answers the command word.\n\n### Worked-study framework\n\nTake one example from your textbook. Cover its solution and attempt it using the five steps above. Compare your method with the marking scheme, correct gaps in a different colour, then solve a similar question without notes.\n\n### Exam trap\n\nDo not memorise a final sentence without understanding the chain of reasoning. Examiners award marks for the correct method, evidence, and precise explanation.`,
-    acedCheckpoints: [
-      `I can define the central idea of ${topic} without notes.`,
-      "I can select and justify the correct method for a new question.",
-      "I can check my answer against the wording of the question.",
-    ],
-  };
+Follow the prescribed ${d.educationBoard} textbook chapter for "${d.topic}" in its own order, and teach every heading, definition, theorem, derivation, figure (described in words), table, in-text example and exercise type that belongs to this part — fully, with the real content. Expand anything the book says briefly.
+
+Length: at least 2000 words of real teaching. Include worked examples with complete step-by-step solutions using actual values, a "### Common mistakes" section and a "### Exam tips" section that are specific to this chapter.`;
 }
 
-export const generateLecture = createServerFn({ method: "POST" })
+const GENERIC_PATTERNS =
+  /(refer to your (text)?book|look (it )?up in your|from your textbook|write (a|the) (precise )?definition|list (the )?key points|find the keyword|take one example from your textbook)/gi;
+
+function looksGeneric(text: string): boolean {
+  const hits = text.match(GENERIC_PATTERNS)?.length ?? 0;
+  return text.length < 2500 || hits >= 3;
+}
+
+function plain(md: string): string {
+  return md
+    .replace(/\$\$[\s\S]*?\$\$/g, " ")
+    .replace(/\$[^$\n]*\$/g, " ")
+    .replace(/[#*_`>|]/g, "")
+    .replace(/\[(.*?)\]\(.*?\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function narrationFrom(md: string, topic: string, index: number): string {
+  const words = plain(md).split(" ").slice(0, 170).join(" ");
+  return `Part ${index + 1} of ${topic}. ${words}`;
+}
+
+function checkpointsFrom(md: string): string[] {
+  const heads = [...md.matchAll(/^#{2,4}\s+(.+)$/gm)]
+    .map((m) => m[1].replace(/[*_`$]/g, "").trim())
+    .filter((h) => !/common mistakes|exam tips/i.test(h))
+    .slice(0, 5);
+  return heads.length
+    ? heads.map((h) => `I can explain "${h}" fully, without notes.`)
+    : ["I can explain every idea in this part without notes."];
+}
+
+/** Generates ONE lecture part of real teaching content. Throws if the AI cannot
+ *  produce real content — the page retries automatically instead of showing filler. */
+export const generateLecturePart = createServerFn({ method: "POST" })
   .inputValidator((v: unknown) => InputSchema.parse(v))
-  .handler(async ({ data }) => {
-    const { geminiJson, normalizeKey } = await import("@/lib/gemini.server");
+  .handler(async ({ data }): Promise<LecturePart> => {
+    const { geminiText, normalizeKey } = await import("@/lib/gemini.server");
     const apiKey = normalizeKey(data.apiKey);
+    const title = LECTURE_TITLES[data.partIndex];
 
-    // Each part is generated in its own call so no single response is truncated —
-    // this is what lets the lecture cover the entire chapter exhaustively.
-    const parts = await Promise.all(
-      TITLES.map(async (title, index) => {
-        const prompt = `You are AceCoach, an elite academic tutor writing for a student who must master an entire chapter with nothing left out — the standard is a lecture an MIT admissions reader would call complete.
+    let { text } = await geminiText({ apiKey, system: SYSTEM, prompt: buildPrompt(data) });
 
-Student:
-- Level: ${data.className}
-- Country: ${data.country}
-- Board/Curriculum: ${data.educationBoard}
-- Chapter/Topic: ${data.topic}
+    // If the answer is thin or drifts into study tips, ask once more for the real material.
+    if (looksGeneric(text)) {
+      try {
+        const more = await geminiText({
+          apiKey,
+          system: SYSTEM,
+          prompt: `${buildPrompt(data)}
 
-Write PART ${index + 1} of 4, titled "${title}".
-Scope of this part: ${PART_BRIEFS[title]}
+Your previous draft is below. It is too short and/or gives study instructions instead of actual content. Rewrite it as the full lesson with the real definitions, theorems, proofs, facts and fully solved examples for "${data.topic}".
 
-Textbook-completeness requirement (most important):
-- Treat the prescribed ${data.educationBoard} textbook chapter on "${data.topic}" as the minimum syllabus. Walk through it section by section in the textbook's own order and teach EVERY heading, sub-heading, definition, law, derivation, diagram/figure explained in words, table, unit, special case, in-text example and end-of-chapter exercise type that belongs to this part. Nothing from the book may be skipped or merely mentioned by name.
-- Where the textbook states something briefly, expand it into a full explanation with reasoning; where it gives an example, work a comparable example fully.
-- Explicitly name the textbook sub-topics you are covering as markdown headings so the student can tick them off.
+"""${text}"""`,
+        });
+        if (more.text.length > text.length) text = more.text;
+      } catch {
+        /* keep the first draft */
+      }
+    } else if (text.length < 9000) {
+      try {
+        const more = await geminiText({
+          apiKey,
+          system: SYSTEM,
+          prompt: `You are continuing part "${title}" of a lesson on "${data.topic}" (${data.className}, ${data.educationBoard}). Here is what is written so far:
 
-Depth requirements:
-- writtenTranscriptMarkdown must be extremely thorough: at least 1800 words for this part. Do not summarise — teach completely.
-- Include several worked examples with full step-by-step solutions and the reasoning behind each step.
-- Include a "Common mistakes and how to avoid them" section and an "Exam tips" section.
-- readingTimeMinutes: honest estimate (usually 12-25).
-- audioSpeakerPrompt: a 130-170 word spoken narration script (plain natural speech, no markdown, no symbols, spell out formulas in words).
-- acedCheckpoints: 3-5 crisp mastery checks for this part.
+"""${text}"""
 
-${FORMAT_RULES}`;
+Continue with the sub-topics, proofs, facts and fully solved examples of this part that are still missing. At least 1000 more words of real content. Do not repeat anything above, do not add a preamble.`,
+        });
+        if (more.text.trim().length > 400) text = `${text.trim()}\n\n${more.text.trim()}`;
+      } catch {
+        /* the first pass is already real content */
+      }
+    }
 
-        try {
-          const raw = await geminiJson<unknown>({
-            apiKey,
-            prompt,
-            schema: partSchema,
-            temperature: 0.35,
-            maxOutputTokens: 32768,
-          });
-          const parsed = LecturePartSchema.safeParse(raw);
-          if (parsed.success && parsed.data.writtenTranscriptMarkdown.trim().length > 200) {
-            let transcript = parsed.data.writtenTranscriptMarkdown;
-
-            // If the model came back thin, run one expansion pass so the part still
-            // covers the whole textbook section instead of a summary.
-            if (transcript.length < 5000) {
-              try {
-                const extra = await geminiJson<{ continuationMarkdown?: string }>({
-                  apiKey,
-                  prompt: `You already wrote this lecture part for ${data.className} (${data.educationBoard}, ${data.country}) on "${data.topic}", part "${title}":
-
-"""${transcript}"""
-
-It is incomplete compared with the prescribed textbook chapter. Write the MISSING material only — the sub-topics, definitions, derivations, worked examples, special cases, diagrams-in-words, tables and exercise types from the book that are absent above. At least 900 words, continuing seamlessly in the same voice, no repetition of what is already written.
-
-${FORMAT_RULES}`,
-                  schema: {
-                    type: "OBJECT",
-                    properties: { continuationMarkdown: { type: "STRING" } },
-                    required: ["continuationMarkdown"],
-                  },
-                  temperature: 0.35,
-                  maxOutputTokens: 32768,
-                });
-                if (extra?.continuationMarkdown && extra.continuationMarkdown.trim().length > 300) {
-                  transcript = `${transcript}\n\n${extra.continuationMarkdown.trim()}`;
-                }
-              } catch {
-                /* the first pass is still good content */
-              }
-            }
-
-            return {
-              ...parsed.data,
-              writtenTranscriptMarkdown: transcript,
-              segmentTitle: parsed.data.segmentTitle || title,
-            };
-          }
-        } catch {
-          /* fall through to reliable content */
-        }
-        return fallbackPart(title, index, data.topic);
-
-      }),
-    );
-
-    return LectureSchema.parse({
-      topic: data.topic,
-      academicRigorHeader: `Master every corner of ${data.topic} — definitions, derivations, traps, and exam-winning method.`,
-      parts,
-    });
+    const words = plain(text).split(" ").length;
+    return {
+      segmentTitle: title,
+      readingTimeMinutes: Math.max(5, Math.round(words / 180)),
+      audioSpeakerPrompt: narrationFrom(text, data.topic, data.partIndex),
+      writtenTranscriptMarkdown: text.trim(),
+      acedCheckpoints: checkpointsFrom(text),
+    };
   });
