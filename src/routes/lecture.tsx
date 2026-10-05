@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { loadProfile } from "@/lib/profile";
-import { generateChapterOutline, generateLecturePart, LECTURE_TITLES, type LecturePart } from "@/lib/lectures.functions";
+import { generateLecturePart, LECTURE_TITLES, type LecturePart } from "@/lib/lectures.functions";
 import { RatingPromptDialog, useRatingPrompt } from "@/components/testimonials";
 import { ApiKeyGate } from "@/components/api-key-gate";
 import { useApiKey, loadApiKey } from "@/lib/user-api-key";
@@ -38,9 +38,7 @@ function LecturePage() {
   const [shownTopic, setShownTopic] = useState("");
   const [slots, setSlots] = useState<Slot[] | null>(null);
   const [active, setActive] = useState(0);
-  const [mapping, setMapping] = useState(false);
   const runId = useRef(0);
-  const outlineRef = useRef<string | undefined>(undefined);
   const prompt = useRatingPrompt();
   const { apiKey } = useApiKey();
 
@@ -49,33 +47,7 @@ function LecturePage() {
     setSlots((prev) => (prev ? prev.map((s, j) => (j === i ? slot : s)) : prev));
   };
 
-  /** Maps the chapter's real named content first so every part is specific. */
-  async function mapChapter(run: number, subject: string): Promise<string | undefined> {
-    const profile = loadProfile();
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      if (run !== runId.current) return undefined;
-      try {
-        const { outline } = await generateChapterOutline({
-          data: {
-            apiKey: apiKey || loadApiKey(),
-            topic: subject,
-            className: profile?.className ?? "10th Grade",
-            country: profile?.country ?? "USA",
-            educationBoard: profile?.educationBoard ?? "Standard Board",
-          },
-        });
-        return outline;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        if (/isn't valid|No Google AI key/i.test(msg)) return undefined;
-        await sleep(3000 * attempt);
-      }
-    }
-    // Parts can still be written without the map.
-    return undefined;
-  }
-
-  async function writePart(run: number, i: number, subject: string, outline?: string): Promise<boolean> {
+  async function writePart(run: number, i: number, subject: string): Promise<boolean> {
     const profile = loadProfile();
     let lastMessage = "";
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -87,7 +59,6 @@ function LecturePage() {
             apiKey: apiKey || loadApiKey(),
             topic: subject,
             partIndex: i,
-            outline,
             className: profile?.className ?? "10th Grade",
             country: profile?.country ?? "USA",
             educationBoard: profile?.educationBoard ?? "Standard Board",
@@ -113,19 +84,13 @@ function LecturePage() {
     setShownTopic(subject);
     setActive(0);
     setSlots(LECTURE_TITLES.map(() => ({ status: "writing", attempt: 1 }) as Slot));
-    setMapping(true);
-    outlineRef.current = undefined;
-    const outline = await mapChapter(run, subject);
-    if (run === runId.current) outlineRef.current = outline;
-    if (run === runId.current) setMapping(false);
-    if (run !== runId.current) return;
     // Part 1 first so the student can start reading, then the rest (staggered to
     // stay within free-key rate limits).
-    const first = writePart(run, 0, subject, outline);
+    const first = writePart(run, 0, subject);
     await sleep(2500);
     const rest = [1, 2, 3].map(async (i, k) => {
       await sleep(k * 2500);
-      return writePart(run, i, subject, outline);
+      return writePart(run, i, subject);
     });
     const results = await Promise.all([first, ...rest]);
     if (run === runId.current && results.some(Boolean)) {
@@ -169,11 +134,6 @@ function LecturePage() {
               <p className="mt-3 text-sm text-primary italic font-serif">
                 Every definition, theorem, proof and worked example of {shownTopic}.
               </p>
-              {mapping && (
-                <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="h-3 w-3 animate-spin" /> Mapping every section of the chapter…
-                </p>
-              )}
             </div>
             <div className="space-y-1">
               {slots.map((s, i) => (
@@ -203,7 +163,7 @@ function LecturePage() {
               <p className="mt-2 text-sm text-muted-foreground">{current.message}</p>
               <Button
                 className="mt-5 gap-2"
-                onClick={() => void writePart(runId.current, active, shownTopic, outlineRef.current)}
+                onClick={() => void writePart(runId.current, active, shownTopic)}
               >
                 <RotateCw className="h-4 w-4" /> Write this part again
               </Button>

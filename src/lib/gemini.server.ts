@@ -3,15 +3,13 @@
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta";
 
-// Static safety-net list, used only if live model discovery fails. Strong models
-// first; the weaker "lite" models are strictly last-resort because they are what
-// produced shallow, generic lessons.
+// Model IDs are tried in order; if one is retired/unavailable for a given key
+// we automatically fall back to the next so students never see a hard failure.
 export const TEXT_MODELS = [
-  "gemini-2.5-flash",
   "gemini-flash-latest",
-  "gemini-2.5-pro",
-  "gemini-flash-lite-latest",
   "gemini-2.5-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-flash-lite-latest",
 ];
 export const TTS_MODELS = [
   "gemini-2.5-flash-preview-tts",
@@ -19,102 +17,6 @@ export const TTS_MODELS = [
 ];
 export const TEXT_MODEL = TEXT_MODELS[0];
 export const TTS_MODEL = TTS_MODELS[0];
-
-// ---------- Live model discovery ----------
-// Google retires and re-points model names every few weeks, which silently pushed
-// students onto weaker models ("it gets dumb after a day or two"). We ask Google
-// which models THIS key can use right now and always pick the strongest ones.
-
-const DISCOVERY_TTL_MS = 3 * 60 * 60 * 1000;
-const discoveryCache = new Map<string, { models: string[]; at: number }>();
-
-async function cacheId(key: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key));
-  return Array.from(new Uint8Array(digest).slice(0, 12))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-const EXCLUDE = /tts|image|embed|live|audio|vision|robotics|computer-use|native|aqa|gemma|learnlm|nano|banana|veo|imagen|thinking-exp|-exp-\d|tuning/i;
-
-function modelVersion(name: string): number {
-  const m = name.match(/gemini-(\d+(?:\.\d+)?)/);
-  return m ? Number(m[1]) : 0;
-}
-
-function modelTier(name: string): number {
-  if (/lite/i.test(name)) return 3;
-  // Older generations (e.g. 2.0) are noticeably shallower — keep them behind pro.
-  if (!/latest/.test(name) && modelVersion(name) < 2.5) return 2;
-  if (/flash/i.test(name)) return 0;
-  if (/pro/i.test(name)) return 1;
-  return 2;
-}
-
-/** Ranks the key's available text models: newest strong flash → pro → others → lite last. */
-export function rankModels(names: string[]): string[] {
-  const usable = [...new Set(names)].filter((n) => n.startsWith("gemini-") && !EXCLUDE.test(n));
-  usable.sort((a, b) => {
-    const ta = modelTier(a);
-    const tb = modelTier(b);
-    if (ta !== tb) return ta - tb;
-    const va = /latest/.test(a) ? -1 : modelVersion(a);
-    const vb = /latest/.test(b) ? -1 : modelVersion(b);
-    if (va !== vb) return vb - va;
-    const pa = /preview|exp/.test(a) ? 1 : 0;
-    const pb = /preview|exp/.test(b) ? 1 : 0;
-    if (pa !== pb) return pa - pb;
-    return a.length - b.length;
-  });
-  const strong = usable.filter((n) => modelTier(n) < 3).slice(0, 5);
-  const lite = usable.filter((n) => modelTier(n) === 3).slice(0, 1);
-  return [...strong, ...lite];
-}
-
-/** Text models for this key, strongest first. Never throws. */
-export async function resolveTextModels(apiKey: string): Promise<string[]> {
-  const key = apiKey.trim();
-  let id = "";
-  try {
-    id = await cacheId(key);
-    const hit = discoveryCache.get(id);
-    if (hit && Date.now() - hit.at < DISCOVERY_TTL_MS) return hit.models;
-  } catch {
-    /* hashing unavailable — just skip the cache */
-  }
-  const modes = isOAuthToken(key) ? [true, false] : [false, true];
-  for (const asBearer of modes) {
-    try {
-      const url = asBearer
-        ? `${BASE}/models?pageSize=1000`
-        : `${BASE}/models?pageSize=1000&key=${encodeURIComponent(key)}`;
-      const res = await fetch(url, { headers: headersFor(key, asBearer) });
-      if (!res.ok) continue;
-      const data = (await res.json()) as {
-        models?: { name?: string; supportedGenerationMethods?: string[] }[];
-      };
-      const names = (data.models ?? [])
-        .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
-        .map((m) => (m.name ?? "").replace(/^models\//, ""));
-      const ranked = rankModels(names);
-      if (ranked.length) {
-        // Strong discovered models, then static strong ones as a safety net, lite last.
-        const strong = ranked.filter((m) => !/lite/.test(m));
-        const lite = ranked.filter((m) => /lite/.test(m));
-        const models = [
-          ...strong,
-          ...TEXT_MODELS.filter((m) => !strong.includes(m) && !/lite/.test(m)),
-          ...(lite.length ? lite : TEXT_MODELS.filter((m) => /lite/.test(m))),
-        ];
-        if (id) discoveryCache.set(id, { models, at: Date.now() });
-        return models;
-      }
-    } catch {
-      /* try the other credential style */
-    }
-  }
-  return TEXT_MODELS;
-}
 
 /** True when the failure is "this model isn't available", so another model may work. */
 function isModelUnavailable(status: number, body: string): boolean {
@@ -256,18 +158,6 @@ export async function geminiFetch(opts: {
     if (clone.generationConfig) delete clone.generationConfig["thinkingConfig"];
     return clone;
   };
-  // "Pro" models must think; a zero thinking budget is rejected there, so give
-  // them a modest budget instead of failing over.
-  const bodyFor = (model: string): unknown => {
-    if (!/pro/i.test(model) || strippedThinking) return body;
-    const clone = JSON.parse(JSON.stringify(body)) as {
-      generationConfig?: { thinkingConfig?: { thinkingBudget?: number } };
-    };
-    if (clone.generationConfig?.thinkingConfig?.thinkingBudget === 0) {
-      clone.generationConfig.thinkingConfig.thinkingBudget = 2048;
-    }
-    return clone;
-  };
   for (const model of models) {
     for (const asBearer of modes) {
       for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -277,7 +167,7 @@ export async function geminiFetch(opts: {
             method: "POST",
             headers: headersFor(key, asBearer),
             signal: opts.signal,
-            body: JSON.stringify(bodyFor(model)),
+            body: JSON.stringify(body),
           });
         } catch (error) {
           if (opts.signal?.aborted) throw error;
@@ -330,7 +220,7 @@ export async function geminiJson<T>(opts: {
   signal?: AbortSignal;
 }): Promise<T> {
   const res = await geminiFetch({
-    model: await resolveTextModels(opts.apiKey),
+    model: TEXT_MODELS,
     method: "generateContent",
     apiKey: opts.apiKey,
     signal: opts.signal,
@@ -389,25 +279,20 @@ export async function geminiText(opts: {
   system?: string;
   temperature?: number;
   maxOutputTokens?: number;
-  /** Small internal reasoning budget (0 = answer directly). */
-  thinkingBudget?: number;
-  /** Ground the answer in live Google Search results (real textbook content). */
-  grounded?: boolean;
   signal?: AbortSignal;
 }): Promise<{ text: string; finishReason: string }> {
   const res = await geminiFetch({
-    model: await resolveTextModels(opts.apiKey),
+    model: TEXT_MODELS,
     method: "generateContent",
     apiKey: opts.apiKey,
     signal: opts.signal,
     body: {
       ...(opts.system ? { systemInstruction: { parts: [{ text: opts.system }] } } : {}),
       contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
-      ...(opts.grounded ? { tools: [{ google_search: {} }] } : {}),
       generationConfig: {
         temperature: opts.temperature ?? 0.4,
         maxOutputTokens: opts.maxOutputTokens ?? 32768,
-        thinkingConfig: { thinkingBudget: opts.thinkingBudget ?? 0 },
+        thinkingConfig: { thinkingBudget: 0 },
       },
     },
   });
@@ -465,7 +350,7 @@ export async function geminiStreamText(opts: {
   signal?: AbortSignal;
 }): Promise<Response> {
   const upstream = await geminiFetch({
-    model: await resolveTextModels(opts.apiKey),
+    model: TEXT_MODELS,
     method: "streamGenerateContent",
     extra: "alt=sse",
     apiKey: opts.apiKey,
