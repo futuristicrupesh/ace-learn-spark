@@ -96,8 +96,14 @@ export async function resolveTextModels(apiKey: string): Promise<string[]> {
         .map((m) => (m.name ?? "").replace(/^models\//, ""));
       const ranked = rankModels(names);
       if (ranked.length) {
-        // Keep the static strong models as a tail safety net.
-        const models = [...ranked, ...TEXT_MODELS.filter((m) => !ranked.includes(m) && !/lite/.test(m))];
+        // Strong discovered models, then static strong ones as a safety net, lite last.
+        const strong = ranked.filter((m) => !/lite/.test(m));
+        const lite = ranked.filter((m) => /lite/.test(m));
+        const models = [
+          ...strong,
+          ...TEXT_MODELS.filter((m) => !strong.includes(m) && !/lite/.test(m)),
+          ...(lite.length ? lite : TEXT_MODELS.filter((m) => /lite/.test(m))),
+        ];
         if (id) discoveryCache.set(id, { models, at: Date.now() });
         return models;
       }
@@ -248,6 +254,18 @@ export async function geminiFetch(opts: {
     if (clone.generationConfig) delete clone.generationConfig["thinkingConfig"];
     return clone;
   };
+  // "Pro" models must think; a zero thinking budget is rejected there, so give
+  // them a modest budget instead of failing over.
+  const bodyFor = (model: string): unknown => {
+    if (!/pro/i.test(model) || strippedThinking) return body;
+    const clone = JSON.parse(JSON.stringify(body)) as {
+      generationConfig?: { thinkingConfig?: { thinkingBudget?: number } };
+    };
+    if (clone.generationConfig?.thinkingConfig?.thinkingBudget === 0) {
+      clone.generationConfig.thinkingConfig.thinkingBudget = 2048;
+    }
+    return clone;
+  };
   for (const model of models) {
     for (const asBearer of modes) {
       for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -257,7 +275,7 @@ export async function geminiFetch(opts: {
             method: "POST",
             headers: headersFor(key, asBearer),
             signal: opts.signal,
-            body: JSON.stringify(body),
+            body: JSON.stringify(bodyFor(model)),
           });
         } catch (error) {
           if (opts.signal?.aborted) throw error;
@@ -310,7 +328,7 @@ export async function geminiJson<T>(opts: {
   signal?: AbortSignal;
 }): Promise<T> {
   const res = await geminiFetch({
-    model: TEXT_MODELS,
+    model: await resolveTextModels(opts.apiKey),
     method: "generateContent",
     apiKey: opts.apiKey,
     signal: opts.signal,
@@ -369,20 +387,25 @@ export async function geminiText(opts: {
   system?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  /** Small internal reasoning budget (0 = answer directly). */
+  thinkingBudget?: number;
+  /** Ground the answer in live Google Search results (real textbook content). */
+  grounded?: boolean;
   signal?: AbortSignal;
 }): Promise<{ text: string; finishReason: string }> {
   const res = await geminiFetch({
-    model: TEXT_MODELS,
+    model: await resolveTextModels(opts.apiKey),
     method: "generateContent",
     apiKey: opts.apiKey,
     signal: opts.signal,
     body: {
       ...(opts.system ? { systemInstruction: { parts: [{ text: opts.system }] } } : {}),
       contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
+      ...(opts.grounded ? { tools: [{ google_search: {} }] } : {}),
       generationConfig: {
         temperature: opts.temperature ?? 0.4,
         maxOutputTokens: opts.maxOutputTokens ?? 32768,
-        thinkingConfig: { thinkingBudget: 0 },
+        thinkingConfig: { thinkingBudget: opts.thinkingBudget ?? 0 },
       },
     },
   });
@@ -440,7 +463,7 @@ export async function geminiStreamText(opts: {
   signal?: AbortSignal;
 }): Promise<Response> {
   const upstream = await geminiFetch({
-    model: TEXT_MODELS,
+    model: await resolveTextModels(opts.apiKey),
     method: "streamGenerateContent",
     extra: "alt=sse",
     apiKey: opts.apiKey,
