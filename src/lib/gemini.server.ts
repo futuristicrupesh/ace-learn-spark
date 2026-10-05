@@ -44,6 +44,8 @@ function modelVersion(name: string): number {
 
 function modelTier(name: string): number {
   if (/lite/i.test(name)) return 3;
+  // Older generations (e.g. 2.0) are noticeably shallower — keep them behind pro.
+  if (!/latest/.test(name) && modelVersion(name) < 2.5) return 2;
   if (/flash/i.test(name)) return 0;
   if (/pro/i.test(name)) return 1;
   return 2;
