@@ -40,6 +40,7 @@ function LecturePage() {
   const [active, setActive] = useState(0);
   const [mapping, setMapping] = useState(false);
   const runId = useRef(0);
+  const outlineRef = useRef<string | undefined>(undefined);
   const prompt = useRatingPrompt();
   const { apiKey } = useApiKey();
 
@@ -113,7 +114,9 @@ function LecturePage() {
     setActive(0);
     setSlots(LECTURE_TITLES.map(() => ({ status: "writing", attempt: 1 }) as Slot));
     setMapping(true);
+    outlineRef.current = undefined;
     const outline = await mapChapter(run, subject);
+    if (run === runId.current) outlineRef.current = outline;
     if (run === runId.current) setMapping(false);
     if (run !== runId.current) return;
     // Part 1 first so the student can start reading, then the rest (staggered to
@@ -200,7 +203,7 @@ function LecturePage() {
               <p className="mt-2 text-sm text-muted-foreground">{current.message}</p>
               <Button
                 className="mt-5 gap-2"
-                onClick={() => void writePart(runId.current, active, shownTopic)}
+                onClick={() => void writePart(runId.current, active, shownTopic, outlineRef.current)}
               >
                 <RotateCw className="h-4 w-4" /> Write this part again
               </Button>
