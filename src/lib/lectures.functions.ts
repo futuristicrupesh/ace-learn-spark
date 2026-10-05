@@ -54,7 +54,7 @@ PART 4 = end of chapter (applications, links, summary formula sheet, exercise qu
 
 Under each part list EVERY specific item as a bullet, one item per bullet, named concretely, e.g.
 - Theorem 6.1 Basic Proportionality Theorem (Thales): a line parallel to one side of a triangle divides the other two sides in the same ratio — proof
-- Formula: $\text{ar}(\triangle ABC)/\text{ar}(\triangle PQR) = (AB/PQ)^2$
+- Formula: $\\text{ar}(\\triangle ABC)/\\text{ar}(\\triangle PQR) = (AB/PQ)^2$
 - Fact: the Tennis Court Oath, 20 June 1789, Third Estate vows not to disperse
 - Exercise type: find an unknown side using similarity with given lengths
 
