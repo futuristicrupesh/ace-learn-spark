@@ -72,7 +72,7 @@ PART 4
 
 function partItems(outline: string | undefined, index: number): string[] {
   if (!outline) return [];
-  const blocks = outline.split(/^\s*\**\s*PART\s*([1-4])\b.*$/im);
+  const blocks = outline.split(/^[\s#*]*PART\s*([1-4])\b.*$/im);
   // split() with a capture group yields [pre, "1", body, "2", body, ...]
   for (let i = 1; i < blocks.length; i += 2) {
     if (Number(blocks[i]) === index + 1) {
