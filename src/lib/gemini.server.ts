@@ -174,25 +174,37 @@ export async function geminiFetch(opts: {
   model: string | string[];
   method: string;
   apiKey: string;
-  body: unknown;
+  body: unknown | ((model: string) => unknown);
   extra?: string;
   signal?: AbortSignal;
 }): Promise<Response> {
+  return (await geminiFetchWithModel(opts)).res;
+}
+
+/** Same as geminiFetch, but also reports which model actually answered. */
+export async function geminiFetchWithModel(opts: {
+  model: string | string[];
+  method: string;
+  apiKey: string;
+  body: unknown | ((model: string) => unknown);
+  extra?: string;
+  signal?: AbortSignal;
+}): Promise<{ res: Response; model: string }> {
   const key = opts.apiKey.trim();
   const modes = isOAuthToken(key) ? [true, false] : [false, true];
   const models = Array.isArray(opts.model) ? opts.model : [opts.model];
   let last: Response | null = null;
-  // Older models reject `thinkingConfig`; if that happens we drop it and retry.
-  let body = opts.body;
-  let strippedThinking = false;
-  const stripThinking = (input: unknown): unknown => {
-    const clone = JSON.parse(JSON.stringify(input)) as {
-      generationConfig?: Record<string, unknown>;
-    };
-    if (clone.generationConfig) delete clone.generationConfig["thinkingConfig"];
-    return clone;
-  };
+  let lastModel = models[0];
+  const clone = (input: unknown) =>
+    JSON.parse(JSON.stringify(input)) as { generationConfig?: Record<string, unknown>; tools?: unknown };
+
   for (const model of models) {
+    lastModel = model;
+    // Some models reject `thinkingConfig` or search tools; drop them and retry.
+    let body: unknown = typeof opts.body === "function" ? (opts.body as (m: string) => unknown)(model) : opts.body;
+    let strippedThinking = false;
+    let strippedTools = false;
+    let skipModel = false;
     for (const asBearer of modes) {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         let res: Response;
@@ -212,11 +224,21 @@ export async function geminiFetch(opts: {
           last = new Response("The AI service could not be reached.", { status: 503 });
           break;
         }
-        if (res.ok) return res;
+        if (res.ok) return { res, model };
         const text = await res.text().catch(() => "");
         if (res.status === 400 && !strippedThinking && /thinking/i.test(text)) {
           strippedThinking = true;
-          body = stripThinking(body);
+          const c = clone(body);
+          if (c.generationConfig) delete c.generationConfig["thinkingConfig"];
+          body = c;
+          attempt -= 1;
+          continue;
+        }
+        if (res.status === 400 && !strippedTools && /tool|search|grounding/i.test(text)) {
+          strippedTools = true;
+          const c = clone(body);
+          delete c.tools;
+          body = c;
           attempt -= 1;
           continue;
         }
@@ -224,22 +246,26 @@ export async function geminiFetch(opts: {
           status: res.status,
           headers: { "retry-after": res.headers.get("retry-after") ?? "" },
         });
+        if (isQuotaExhausted(res.status, text)) {
+          skipModel = true;
+          break;
+        }
         if (isTransientFailure(res.status, text) && attempt < 2) {
           await waitForRetry(retryDelay(res, attempt), opts.signal);
           continue;
         }
         break;
       }
-
-
-      if (!last) continue;
+      if (skipModel || !last) break;
       const errBody = await last.clone().text().catch(() => "");
       if (isModelUnavailable(last.status, errBody) || isTransientFailure(last.status, errBody)) break;
-
       if (![400, 401, 403].includes(last.status)) break;
     }
   }
-  return last ?? new Response("The AI service could not be reached.", { status: 503 });
+  return {
+    res: last ?? new Response("The AI service could not be reached.", { status: 503 }),
+    model: lastModel,
+  };
 }
 
 
