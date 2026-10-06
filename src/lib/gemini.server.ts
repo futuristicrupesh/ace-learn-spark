@@ -341,20 +341,31 @@ export async function geminiText(opts: {
   temperature?: number;
   maxOutputTokens?: number;
   signal?: AbortSignal;
-}): Promise<{ text: string; finishReason: string }> {
-  const res = await geminiFetch({
-    model: TEXT_MODELS,
+  /** Use the strongest-first model list and a reasoning budget (lessons). */
+  deep?: boolean;
+  /** Ground the answer with Google Search so even rare topics get real facts. */
+  search?: boolean;
+  /** Override the model order (e.g. skip lite models). */
+  models?: string[];
+}): Promise<{ text: string; finishReason: string; model: string }> {
+  const { res, model } = await geminiFetchWithModel({
+    model: opts.models ?? (opts.deep ? LESSON_MODELS : TEXT_MODELS),
     method: "generateContent",
     apiKey: opts.apiKey,
     signal: opts.signal,
-    body: {
-      ...(opts.system ? { systemInstruction: { parts: [{ text: opts.system }] } } : {}),
-      contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
-      generationConfig: {
-        temperature: opts.temperature ?? 0.4,
-        maxOutputTokens: opts.maxOutputTokens ?? 32768,
-        thinkingConfig: { thinkingBudget: 0 },
-      },
+    body: (m: string) => {
+      const thinkingConfig = thinkingFor(m, !!opts.deep);
+      const cap = /2\.0/.test(m) ? 8192 : 65536;
+      return {
+        ...(opts.system ? { systemInstruction: { parts: [{ text: opts.system }] } } : {}),
+        contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
+        ...(opts.search ? { tools: [{ google_search: {} }] } : {}),
+        generationConfig: {
+          temperature: opts.temperature ?? 0.4,
+          maxOutputTokens: Math.min(opts.maxOutputTokens ?? 32768, cap),
+          ...(thinkingConfig ? { thinkingConfig } : {}),
+        },
+      };
     },
   });
   if (!res.ok) throw friendlyError(res.status, await res.text().catch(() => ""));
@@ -367,7 +378,11 @@ export async function geminiText(opts: {
   if (!text.trim()) {
     throw new GeminiError(`The AI returned an empty response (${cand?.finishReason ?? "unknown"}).`, 502);
   }
-  return { text: text.replace(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```\s*$/i, "$1"), finishReason: cand?.finishReason ?? "" };
+  return {
+    text: text.replace(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```\s*$/i, "$1"),
+    finishReason: cand?.finishReason ?? "",
+    model,
+  };
 }
 
 
