@@ -5,11 +5,27 @@ const BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 // Model IDs are tried in order; if one is retired/unavailable for a given key
 // we automatically fall back to the next so students never see a hard failure.
+// Lite models are ALWAYS last: they write shallow, generic lessons. Previously a
+// lite model sat second, so once a key's daily quota on the main model ran out
+// (usually after a day or two) every lesson silently became "dumb".
 export const TEXT_MODELS = [
   "gemini-flash-latest",
-  "gemini-2.5-flash-lite",
   "gemini-2.5-flash",
+  "gemini-pro-latest",
+  "gemini-2.5-pro",
+  "gemini-2.0-flash",
   "gemini-flash-lite-latest",
+  "gemini-2.5-flash-lite",
+];
+/** Deep teaching content: strongest models first. */
+export const LESSON_MODELS = [
+  "gemini-pro-latest",
+  "gemini-2.5-pro",
+  "gemini-flash-latest",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-flash-lite-latest",
+  "gemini-2.5-flash-lite",
 ];
 export const TTS_MODELS = [
   "gemini-2.5-flash-preview-tts",
@@ -17,6 +33,24 @@ export const TTS_MODELS = [
 ];
 export const TEXT_MODEL = TEXT_MODELS[0];
 export const TTS_MODEL = TTS_MODELS[0];
+
+export function isLiteModel(model: string): boolean {
+  return /lite|2\.0/.test(model);
+}
+
+/** A small reasoning budget makes answers far more specific, without letting
+ *  "thinking" swallow the whole answer (which is what produced empty lessons). */
+function thinkingFor(model: string, wanted: boolean): Record<string, unknown> | undefined {
+  if (!wanted) return /pro/.test(model) ? { thinkingBudget: 128 } : { thinkingBudget: 0 };
+  if (/pro/.test(model)) return { thinkingBudget: 4096 };
+  if (isLiteModel(model)) return undefined;
+  return { thinkingBudget: 2048 };
+}
+
+/** Daily/total quota exhaustion on one model: retrying it is pointless, go to the next. */
+function isQuotaExhausted(status: number, body: string): boolean {
+  return status === 429 && /per ?day|PerDay|limit: ?0|exceeded your current quota/i.test(body);
+}
 
 /** True when the failure is "this model isn't available", so another model may work. */
 function isModelUnavailable(status: number, body: string): boolean {
