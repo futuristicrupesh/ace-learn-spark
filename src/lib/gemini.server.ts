@@ -284,18 +284,19 @@ export async function geminiJson<T>(opts: {
     method: "generateContent",
     apiKey: opts.apiKey,
     signal: opts.signal,
-    body: {
-      contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
-      generationConfig: {
-        temperature: opts.temperature ?? 0.3,
-        maxOutputTokens: opts.maxOutputTokens ?? 16384,
-        // Without this the 2.5 "thinking" models spend the entire output budget on
-        // internal reasoning and return an EMPTY answer, which is what silently
-        // pushed every lecture/homework onto the generic fallback text.
-        thinkingConfig: { thinkingBudget: 0 },
-        responseMimeType: "application/json",
-        responseSchema: opts.schema,
-      },
+    body: (model: string) => {
+      const thinkingConfig = thinkingFor(model, false);
+      return {
+        contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
+        generationConfig: {
+          temperature: opts.temperature ?? 0.3,
+          maxOutputTokens: opts.maxOutputTokens ?? 16384,
+          // Unbounded thinking can swallow the whole output budget and return an EMPTY answer.
+          ...(thinkingConfig ? { thinkingConfig } : {}),
+          responseMimeType: "application/json",
+          responseSchema: opts.schema,
+        },
+      };
     },
   });
 
