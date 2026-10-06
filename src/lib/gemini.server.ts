@@ -290,7 +290,7 @@ export async function geminiJson<T>(opts: {
         contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
         generationConfig: {
           temperature: opts.temperature ?? 0.3,
-          maxOutputTokens: opts.maxOutputTokens ?? 16384,
+          maxOutputTokens: Math.min(opts.maxOutputTokens ?? 16384, /2\.0/.test(model) ? 8192 : 65536),
           // Unbounded thinking can swallow the whole output budget and return an EMPTY answer.
           ...(thinkingConfig ? { thinkingConfig } : {}),
           responseMimeType: "application/json",
@@ -431,17 +431,20 @@ export async function geminiStreamText(opts: {
     extra: "alt=sse",
     apiKey: opts.apiKey,
     signal: opts.signal,
-    body: {
-      systemInstruction: { parts: [{ text: opts.system }] },
-      contents: opts.messages.map((m) => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.content }],
-      })),
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 16384,
-        thinkingConfig: { thinkingBudget: 0 },
-      },
+    body: (model: string) => {
+      const thinkingConfig = thinkingFor(model, false);
+      return {
+        systemInstruction: { parts: [{ text: opts.system }] },
+        contents: opts.messages.map((m) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }],
+        })),
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: /2\.0/.test(model) ? 8192 : 16384,
+          ...(thinkingConfig ? { thinkingConfig } : {}),
+        },
+      };
     },
   });
 
