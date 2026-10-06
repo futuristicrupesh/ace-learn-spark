@@ -5,11 +5,27 @@ const BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 // Model IDs are tried in order; if one is retired/unavailable for a given key
 // we automatically fall back to the next so students never see a hard failure.
+// Lite models are ALWAYS last: they write shallow, generic lessons. Previously a
+// lite model sat second, so once a key's daily quota on the main model ran out
+// (usually after a day or two) every lesson silently became "dumb".
 export const TEXT_MODELS = [
   "gemini-flash-latest",
-  "gemini-2.5-flash-lite",
   "gemini-2.5-flash",
+  "gemini-pro-latest",
+  "gemini-2.5-pro",
+  "gemini-2.0-flash",
   "gemini-flash-lite-latest",
+  "gemini-2.5-flash-lite",
+];
+/** Deep teaching content: strongest models first. */
+export const LESSON_MODELS = [
+  "gemini-pro-latest",
+  "gemini-2.5-pro",
+  "gemini-flash-latest",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-flash-lite-latest",
+  "gemini-2.5-flash-lite",
 ];
 export const TTS_MODELS = [
   "gemini-2.5-flash-preview-tts",
@@ -17,6 +33,24 @@ export const TTS_MODELS = [
 ];
 export const TEXT_MODEL = TEXT_MODELS[0];
 export const TTS_MODEL = TTS_MODELS[0];
+
+export function isLiteModel(model: string): boolean {
+  return /lite|2\.0/.test(model);
+}
+
+/** A small reasoning budget makes answers far more specific, without letting
+ *  "thinking" swallow the whole answer (which is what produced empty lessons). */
+function thinkingFor(model: string, wanted: boolean): Record<string, unknown> | undefined {
+  if (!wanted) return /pro/.test(model) ? { thinkingBudget: 128 } : { thinkingBudget: 0 };
+  if (/pro/.test(model)) return { thinkingBudget: 4096 };
+  if (isLiteModel(model)) return undefined;
+  return { thinkingBudget: 2048 };
+}
+
+/** Daily/total quota exhaustion on one model: retrying it is pointless, go to the next. */
+function isQuotaExhausted(status: number, body: string): boolean {
+  return status === 429 && /per ?day|PerDay|limit: ?0|exceeded your current quota/i.test(body);
+}
 
 /** True when the failure is "this model isn't available", so another model may work. */
 function isModelUnavailable(status: number, body: string): boolean {
@@ -140,25 +174,37 @@ export async function geminiFetch(opts: {
   model: string | string[];
   method: string;
   apiKey: string;
-  body: unknown;
+  body: unknown | ((model: string) => unknown);
   extra?: string;
   signal?: AbortSignal;
 }): Promise<Response> {
+  return (await geminiFetchWithModel(opts)).res;
+}
+
+/** Same as geminiFetch, but also reports which model actually answered. */
+export async function geminiFetchWithModel(opts: {
+  model: string | string[];
+  method: string;
+  apiKey: string;
+  body: unknown | ((model: string) => unknown);
+  extra?: string;
+  signal?: AbortSignal;
+}): Promise<{ res: Response; model: string }> {
   const key = opts.apiKey.trim();
   const modes = isOAuthToken(key) ? [true, false] : [false, true];
   const models = Array.isArray(opts.model) ? opts.model : [opts.model];
   let last: Response | null = null;
-  // Older models reject `thinkingConfig`; if that happens we drop it and retry.
-  let body = opts.body;
-  let strippedThinking = false;
-  const stripThinking = (input: unknown): unknown => {
-    const clone = JSON.parse(JSON.stringify(input)) as {
-      generationConfig?: Record<string, unknown>;
-    };
-    if (clone.generationConfig) delete clone.generationConfig["thinkingConfig"];
-    return clone;
-  };
+  let lastModel = models[0];
+  const clone = (input: unknown) =>
+    JSON.parse(JSON.stringify(input)) as { generationConfig?: Record<string, unknown>; tools?: unknown };
+
   for (const model of models) {
+    lastModel = model;
+    // Some models reject `thinkingConfig` or search tools; drop them and retry.
+    let body: unknown = typeof opts.body === "function" ? (opts.body as (m: string) => unknown)(model) : opts.body;
+    let strippedThinking = false;
+    let strippedTools = false;
+    let skipModel = false;
     for (const asBearer of modes) {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         let res: Response;
@@ -178,11 +224,21 @@ export async function geminiFetch(opts: {
           last = new Response("The AI service could not be reached.", { status: 503 });
           break;
         }
-        if (res.ok) return res;
+        if (res.ok) return { res, model };
         const text = await res.text().catch(() => "");
         if (res.status === 400 && !strippedThinking && /thinking/i.test(text)) {
           strippedThinking = true;
-          body = stripThinking(body);
+          const c = clone(body);
+          if (c.generationConfig) delete c.generationConfig["thinkingConfig"];
+          body = c;
+          attempt -= 1;
+          continue;
+        }
+        if (res.status === 400 && !strippedTools && /tool|search|grounding/i.test(text)) {
+          strippedTools = true;
+          const c = clone(body);
+          delete c.tools;
+          body = c;
           attempt -= 1;
           continue;
         }
@@ -190,22 +246,26 @@ export async function geminiFetch(opts: {
           status: res.status,
           headers: { "retry-after": res.headers.get("retry-after") ?? "" },
         });
+        if (isQuotaExhausted(res.status, text)) {
+          skipModel = true;
+          break;
+        }
         if (isTransientFailure(res.status, text) && attempt < 2) {
           await waitForRetry(retryDelay(res, attempt), opts.signal);
           continue;
         }
         break;
       }
-
-
-      if (!last) continue;
+      if (skipModel || !last) break;
       const errBody = await last.clone().text().catch(() => "");
       if (isModelUnavailable(last.status, errBody) || isTransientFailure(last.status, errBody)) break;
-
       if (![400, 401, 403].includes(last.status)) break;
     }
   }
-  return last ?? new Response("The AI service could not be reached.", { status: 503 });
+  return {
+    res: last ?? new Response("The AI service could not be reached.", { status: 503 }),
+    model: lastModel,
+  };
 }
 
 
@@ -224,18 +284,19 @@ export async function geminiJson<T>(opts: {
     method: "generateContent",
     apiKey: opts.apiKey,
     signal: opts.signal,
-    body: {
-      contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
-      generationConfig: {
-        temperature: opts.temperature ?? 0.3,
-        maxOutputTokens: opts.maxOutputTokens ?? 16384,
-        // Without this the 2.5 "thinking" models spend the entire output budget on
-        // internal reasoning and return an EMPTY answer, which is what silently
-        // pushed every lecture/homework onto the generic fallback text.
-        thinkingConfig: { thinkingBudget: 0 },
-        responseMimeType: "application/json",
-        responseSchema: opts.schema,
-      },
+    body: (model: string) => {
+      const thinkingConfig = thinkingFor(model, false);
+      return {
+        contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
+        generationConfig: {
+          temperature: opts.temperature ?? 0.3,
+          maxOutputTokens: Math.min(opts.maxOutputTokens ?? 16384, /2\.0/.test(model) ? 8192 : 65536),
+          // Unbounded thinking can swallow the whole output budget and return an EMPTY answer.
+          ...(thinkingConfig ? { thinkingConfig } : {}),
+          responseMimeType: "application/json",
+          responseSchema: opts.schema,
+        },
+      };
     },
   });
 
@@ -280,20 +341,31 @@ export async function geminiText(opts: {
   temperature?: number;
   maxOutputTokens?: number;
   signal?: AbortSignal;
-}): Promise<{ text: string; finishReason: string }> {
-  const res = await geminiFetch({
-    model: TEXT_MODELS,
+  /** Use the strongest-first model list and a reasoning budget (lessons). */
+  deep?: boolean;
+  /** Ground the answer with Google Search so even rare topics get real facts. */
+  search?: boolean;
+  /** Override the model order (e.g. skip lite models). */
+  models?: string[];
+}): Promise<{ text: string; finishReason: string; model: string }> {
+  const { res, model } = await geminiFetchWithModel({
+    model: opts.models ?? (opts.deep ? LESSON_MODELS : TEXT_MODELS),
     method: "generateContent",
     apiKey: opts.apiKey,
     signal: opts.signal,
-    body: {
-      ...(opts.system ? { systemInstruction: { parts: [{ text: opts.system }] } } : {}),
-      contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
-      generationConfig: {
-        temperature: opts.temperature ?? 0.4,
-        maxOutputTokens: opts.maxOutputTokens ?? 32768,
-        thinkingConfig: { thinkingBudget: 0 },
-      },
+    body: (m: string) => {
+      const thinkingConfig = thinkingFor(m, !!opts.deep);
+      const cap = /2\.0/.test(m) ? 8192 : 65536;
+      return {
+        ...(opts.system ? { systemInstruction: { parts: [{ text: opts.system }] } } : {}),
+        contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
+        ...(opts.search ? { tools: [{ google_search: {} }] } : {}),
+        generationConfig: {
+          temperature: opts.temperature ?? 0.4,
+          maxOutputTokens: Math.min(opts.maxOutputTokens ?? 32768, cap),
+          ...(thinkingConfig ? { thinkingConfig } : {}),
+        },
+      };
     },
   });
   if (!res.ok) throw friendlyError(res.status, await res.text().catch(() => ""));
@@ -306,7 +378,11 @@ export async function geminiText(opts: {
   if (!text.trim()) {
     throw new GeminiError(`The AI returned an empty response (${cand?.finishReason ?? "unknown"}).`, 502);
   }
-  return { text: text.replace(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```\s*$/i, "$1"), finishReason: cand?.finishReason ?? "" };
+  return {
+    text: text.replace(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```\s*$/i, "$1"),
+    finishReason: cand?.finishReason ?? "",
+    model,
+  };
 }
 
 
@@ -355,17 +431,20 @@ export async function geminiStreamText(opts: {
     extra: "alt=sse",
     apiKey: opts.apiKey,
     signal: opts.signal,
-    body: {
-      systemInstruction: { parts: [{ text: opts.system }] },
-      contents: opts.messages.map((m) => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.content }],
-      })),
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 16384,
-        thinkingConfig: { thinkingBudget: 0 },
-      },
+    body: (model: string) => {
+      const thinkingConfig = thinkingFor(model, false);
+      return {
+        systemInstruction: { parts: [{ text: opts.system }] },
+        contents: opts.messages.map((m) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }],
+        })),
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: /2\.0/.test(model) ? 8192 : 16384,
+          ...(thinkingConfig ? { thinkingConfig } : {}),
+        },
+      };
     },
   });
 

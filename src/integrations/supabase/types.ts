@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      lecture_cache: {
+        Row: {
+          cache_key: string
+          content: Json
+          created_at: string
+          id: string
+          model: string | null
+          part_index: number
+          quality: number
+          updated_at: string
+        }
+        Insert: {
+          cache_key: string
+          content: Json
+          created_at?: string
+          id?: string
+          model?: string | null
+          part_index: number
+          quality?: number
+          updated_at?: string
+        }
+        Update: {
+          cache_key?: string
+          content?: Json
+          created_at?: string
+          id?: string
+          model?: string | null
+          part_index?: number
+          quality?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           class_name: string

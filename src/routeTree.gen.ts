@@ -9,39 +9,19 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TestimonialsRouteImport } from './routes/testimonials'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as LectureRouteImport } from './routes/lecture'
-import { Route as HomeworkRouteImport } from './routes/homework'
-import { Route as CoachRouteImport } from './routes/coach'
-import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ApiTtsRouteImport } from './routes/api/tts'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as CoachRouteImport } from './routes/coach'
+import { Route as HomeworkRouteImport } from './routes/homework'
+import { Route as LectureRouteImport } from './routes/lecture'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as TestimonialsRouteImport } from './routes/testimonials'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiTtsRouteImport } from './routes/api/tts'
 
-const TestimonialsRoute = TestimonialsRouteImport.update({
-  id: '/testimonials',
-  path: '/testimonials',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LectureRoute = LectureRouteImport.update({
-  id: '/lecture',
-  path: '/lecture',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HomeworkRoute = HomeworkRouteImport.update({
-  id: '/homework',
-  path: '/homework',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CoachRoute = CoachRouteImport.update({
-  id: '/coach',
-  path: '/coach',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -49,19 +29,39 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const CoachRoute = CoachRouteImport.update({
+  id: '/coach',
+  path: '/coach',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTtsRoute = ApiTtsRouteImport.update({
-  id: '/api/tts',
-  path: '/api/tts',
+const HomeworkRoute = HomeworkRouteImport.update({
+  id: '/homework',
+  path: '/homework',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LectureRoute = LectureRouteImport.update({
+  id: '/lecture',
+  path: '/lecture',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TestimonialsRoute = TestimonialsRouteImport.update({
+  id: '/testimonials',
+  path: '/testimonials',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTtsRoute = ApiTtsRouteImport.update({
+  id: '/api/tts',
+  path: '/api/tts',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -149,39 +149,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/testimonials': {
-      id: '/testimonials'
-      path: '/testimonials'
-      fullPath: '/testimonials'
-      preLoaderRoute: typeof TestimonialsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/lecture': {
-      id: '/lecture'
-      path: '/lecture'
-      fullPath: '/lecture'
-      preLoaderRoute: typeof LectureRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/homework': {
-      id: '/homework'
-      path: '/homework'
-      fullPath: '/homework'
-      preLoaderRoute: typeof HomeworkRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/coach': {
-      id: '/coach'
-      path: '/coach'
-      fullPath: '/coach'
-      preLoaderRoute: typeof CoachRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -191,18 +163,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/coach': {
+      id: '/coach'
+      path: '/coach'
+      fullPath: '/coach'
+      preLoaderRoute: typeof CoachRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/tts': {
-      id: '/api/tts'
-      path: '/api/tts'
-      fullPath: '/api/tts'
-      preLoaderRoute: typeof ApiTtsRouteImport
+    '/homework': {
+      id: '/homework'
+      path: '/homework'
+      fullPath: '/homework'
+      preLoaderRoute: typeof HomeworkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lecture': {
+      id: '/lecture'
+      path: '/lecture'
+      fullPath: '/lecture'
+      preLoaderRoute: typeof LectureRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/testimonials': {
+      id: '/testimonials'
+      path: '/testimonials'
+      fullPath: '/testimonials'
+      preLoaderRoute: typeof TestimonialsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat': {
@@ -210,6 +203,13 @@ declare module '@tanstack/react-router' {
       path: '/api/chat'
       fullPath: '/api/chat'
       preLoaderRoute: typeof ApiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/tts': {
+      id: '/api/tts'
+      path: '/api/tts'
+      fullPath: '/api/tts'
+      preLoaderRoute: typeof ApiTtsRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
