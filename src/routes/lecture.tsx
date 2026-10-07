@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { loadProfile } from "@/lib/profile";
-import { generateLecturePart, LECTURE_TITLES, type LecturePart } from "@/lib/lectures.functions";
+import { generateChapterOutline, generateLecturePart, LECTURE_TITLES, type LecturePart } from "@/lib/lectures.functions";
 import { RatingPromptDialog, useRatingPrompt } from "@/components/testimonials";
 import { ApiKeyGate } from "@/components/api-key-gate";
 import { useApiKey, loadApiKey } from "@/lib/user-api-key";
@@ -39,6 +39,8 @@ function LecturePage() {
   const [slots, setSlots] = useState<Slot[] | null>(null);
   const [active, setActive] = useState(0);
   const runId = useRef(0);
+  const outlineRef = useRef<string[] | null>(null);
+  const [mapping, setMapping] = useState(false);
   const prompt = useRatingPrompt();
   const { apiKey } = useApiKey();
 
@@ -47,7 +49,7 @@ function LecturePage() {
     setSlots((prev) => (prev ? prev.map((s, j) => (j === i ? slot : s)) : prev));
   };
 
-  async function writePart(run: number, i: number, subject: string): Promise<boolean> {
+  async function writePart(run: number, i: number, subject: string, fresh = false): Promise<boolean> {
     const profile = loadProfile();
     let lastMessage = "";
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -62,6 +64,8 @@ function LecturePage() {
             className: profile?.className ?? "10th Grade",
             country: profile?.country ?? "USA",
             educationBoard: profile?.educationBoard ?? "Standard Board",
+            outline: outlineRef.current?.[i] || undefined,
+            fresh: fresh || undefined,
           },
         });
         setSlot(run, i, { status: "ready", part });
@@ -84,6 +88,27 @@ function LecturePage() {
     setShownTopic(subject);
     setActive(0);
     setSlots(LECTURE_TITLES.map(() => ({ status: "writing", attempt: 1 }) as Slot));
+    // Map the real chapter first, so every part teaches its actual named items.
+    outlineRef.current = null;
+    setMapping(true);
+    try {
+      const profile = loadProfile();
+      const { outline } = await generateChapterOutline({
+        data: {
+          apiKey: apiKey || loadApiKey(),
+          topic: subject,
+          className: profile?.className ?? "10th Grade",
+          country: profile?.country ?? "USA",
+          educationBoard: profile?.educationBoard ?? "Standard Board",
+        },
+      });
+      if (run === runId.current) outlineRef.current = outline;
+    } catch {
+      /* lessons are still written without the map */
+    } finally {
+      if (run === runId.current) setMapping(false);
+    }
+    if (run !== runId.current) return;
     // Part 1 first so the student can start reading, then the rest (staggered to
     // stay within free-key rate limits).
     const first = writePart(run, 0, subject);
@@ -156,14 +181,18 @@ function LecturePage() {
           </aside>
 
           {current?.status === "ready" ? (
-            <LecturePartView part={current.part} index={active} />
+            <LecturePartView
+              part={current.part}
+              index={active}
+              onRewrite={() => void writePart(runId.current, active, shownTopic, true)}
+            />
           ) : current?.status === "failed" ? (
             <Card className="p-10 text-center">
               <p className="font-medium">This part is taking longer than usual.</p>
               <p className="mt-2 text-sm text-muted-foreground">{current.message}</p>
               <Button
                 className="mt-5 gap-2"
-                onClick={() => void writePart(runId.current, active, shownTopic)}
+                onClick={() => void writePart(runId.current, active, shownTopic, true)}
               >
                 <RotateCw className="h-4 w-4" /> Write this part again
               </Button>
@@ -171,7 +200,9 @@ function LecturePage() {
           ) : (
             <Card className="p-10 text-center text-muted-foreground">
               <Loader2 className="h-6 w-6 animate-spin mx-auto mb-3" />
-              AceCoach is writing Part {active + 1}: {LECTURE_TITLES[active]} — the full chapter content, with proofs and solved examples.
+              {mapping
+                ? <>AceCoach is mapping every section, definition and result of {shownTopic}…</>
+                : <>AceCoach is writing Part {active + 1}: {LECTURE_TITLES[active]} — the full chapter content, with proofs and solved examples.</>}
               {current?.status === "writing" && current.attempt > 1 && (
                 <p className="mt-2 text-xs">The AI is busy right now, still working on it…</p>
               )}
@@ -187,9 +218,15 @@ function LecturePage() {
   );
 }
 
-function LecturePartView({ part, index }: { part: LecturePart; index: number }) {
+function LecturePartView({ part, index, onRewrite }: { part: LecturePart; index: number; onRewrite: () => void }) {
   return (
     <Card className="p-8">
+      {part.lightModel && (
+        <div className="mb-5 rounded-md border border-accent/30 bg-accent/5 p-3 text-sm">
+          Your Google AI key has used up today's limit on Google's strongest model, so this part was written by a lighter one.{" "}
+          <strong>Generate a new free key at aistudio.google.com and paste it on the AI Key page</strong> for the most detailed lessons, or try again tomorrow.
+        </div>
+      )}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <Badge variant="secondary" className="mb-2">Part {index + 1} · ~{part.readingTimeMinutes} min</Badge>
@@ -199,6 +236,12 @@ function LecturePartView({ part, index }: { part: LecturePart; index: number }) 
       </div>
 
       <Markdown className="prose-ace mt-6">{part.writtenTranscriptMarkdown}</Markdown>
+
+      <div className="mt-6 flex justify-end">
+        <Button variant="ghost" size="sm" className="gap-2" onClick={onRewrite}>
+          <RotateCw className="h-4 w-4" /> Write this part again, in more depth
+        </Button>
+      </div>
 
       <div className="mt-8 rounded-lg border border-accent/30 bg-accent/5 p-5">
         <p className="text-xs uppercase tracking-wide text-accent-foreground/70 font-semibold">Aced Checkpoints</p>
