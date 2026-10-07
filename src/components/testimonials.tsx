@@ -9,7 +9,13 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Star, BadgeCheck, Users, MessageSquareQuote } from "lucide-react";
+import { Star, BadgeCheck, Users, MessageSquareQuote, Trash2 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
+const CHANGED = "ace:testimonials-changed";
 
 
 export type Testimonial = {
@@ -38,6 +44,28 @@ export function useTestimonials() {
 
   useEffect(() => {
     void refresh();
+    // Live updates: a removed or new testimonial shows up on every device at once.
+    const channel = supabase
+      .channel(`testimonials-${Math.random().toString(36).slice(2)}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "testimonials" }, (payload) => {
+        if (payload.eventType === "DELETE") {
+          const id = (payload.old as { id?: string })?.id;
+          if (id) setItems((prev) => prev.filter((t) => t.id !== id));
+        }
+        void refresh();
+      })
+      .subscribe();
+    const onLocal = () => void refresh();
+    const onFocus = () => { if (document.visibilityState === "visible") void refresh(); };
+    window.addEventListener(CHANGED, onLocal);
+    document.addEventListener("visibilitychange", onFocus);
+    const poll = window.setInterval(() => void refresh(), 60_000);
+    return () => {
+      void supabase.removeChannel(channel);
+      window.removeEventListener(CHANGED, onLocal);
+      document.removeEventListener("visibilitychange", onFocus);
+      window.clearInterval(poll);
+    };
   }, [refresh]);
 
   return { items, loading, refresh };
@@ -72,10 +100,51 @@ function initials(name: string) {
   return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("") || "S";
 }
 
+function DeleteTestimonial({ id }: { id: string }) {
+  const [busy, setBusy] = useState(false);
+  async function remove() {
+    setBusy(true);
+    const { data, error } = await supabase.from("testimonials").delete().eq("id", id).select("id");
+    setBusy(false);
+    if (error || !data?.length) {
+      toast.error("Couldn't remove it. Please sign in with the account that posted it and try again.");
+      return;
+    }
+    toast.success("Your testimonial was removed.");
+    window.dispatchEvent(new Event(CHANGED));
+  }
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 text-muted-foreground hover:text-destructive" disabled={busy}>
+          <Trash2 className="h-4 w-4" /> {busy ? "Removing…" : "Delete"}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete your testimonial?</AlertDialogTitle>
+          <AlertDialogDescription>
+            It will disappear for everyone, and the ratings and totals will update straight away. This can't be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep it</AlertDialogCancel>
+          <AlertDialogAction onClick={() => void remove()}>Delete</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export function TestimonialCard({ t }: { t: Testimonial }) {
+  const { user } = useAuth();
+  const mine = !!user && t.user_id === user.id;
   return (
     <Card className="p-5 flex flex-col">
-      <Stars value={t.rating} />
+      <div className="flex items-center justify-between gap-2">
+        <Stars value={t.rating} />
+        {mine && <DeleteTestimonial id={t.id} />}
+      </div>
       <p className="mt-3 flex-1 text-sm leading-relaxed">{t.message}</p>
       <div className="mt-5 flex items-center gap-3 border-t border-border/60 pt-4">
         <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
@@ -188,6 +257,7 @@ function useSubmitTestimonial() {
     setBusy(false);
     if (error) { toast.error(error.message); return false; }
     toast.success("Thanks! Your rating is live.");
+    window.dispatchEvent(new Event(CHANGED));
     return true;
   }
 
